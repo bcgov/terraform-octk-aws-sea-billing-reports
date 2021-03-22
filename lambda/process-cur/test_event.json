@@ -1,0 +1,15 @@
+{
+    "month": 1,
+    "year": 2021,
+    "teams": [
+        {
+            "contact_name": "John Smith",
+            "contact_email": "john@domain.com",
+            "business_unit": "AWS Test",
+            "accountIds": [
+                123456789012,
+                123456789012
+            ]
+        }
+    ]
+}
