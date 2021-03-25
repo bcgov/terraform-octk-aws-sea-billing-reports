@@ -50,10 +50,10 @@ def handler(event, context):
     else:
         print("The file does not exist")    
         
-    
-    df = pd.read_csv(local_file)
+    conver_dict = { 'line_item_usage_account_id': str }
+    df = pd.read_csv(local_file, dtype=conver_dict)
     pd.set_option('display.float_format', '${:.2f}'.format)
-    
+   
     billing_temp = df.query('year == [{year}] and month == [{month}] and (line_item_usage_account_id in {ids})'.format(year=year, month=month, ids=accountIds))
     billing = pd.pivot_table(billing_temp,index=['year', 'month', 'line_item_usage_account_id', 'line_item_product_code' ], values=['line_item_blended_cost'], aggfunc=[np.sum],fill_value=0, margins=True, margins_name='Total')
     
