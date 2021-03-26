@@ -18,10 +18,11 @@ s3     = boto3.resource('s3')
 def handler(event, context):
     # SQL Query to execute
     query = ("""
-       SELECT 
+       SELECT
         line_item_usage_account_id, line_item_product_code, line_item_blended_cost, year, month
         FROM cost_and_usage_report
         WHERE year = '{year}' and month = '{month}'
+        and line_item_blended_cost > 0
     """.format(year=event['year'], month=event['month']))
 
     print("Executing query: {}".format(query))
@@ -29,11 +30,11 @@ def handler(event, context):
 
     print("Results:")
     print(result)
-    
+
     return result
-    
-    
-    
+
+
+
 @retry(stop_max_attempt_number = 10,
     wait_exponential_multiplier = 300,
     wait_exponential_max = 1 * 60 * 1000)
@@ -68,7 +69,6 @@ def run_query(query, database, s3_output):
 
         s3_key = QueryExecutionId + '.csv'
         local_filename = s3_ouput + '/' + QueryExecutionId + '.csv'
-        
+
         return local_filename
-    
-        
+
