@@ -4,6 +4,9 @@ import numpy as np
 import pandas as pd
 from jinja2 import Environment, FileSystemLoader
 
+from openpyxl import Workbook
+from openpyxl.utils.dataframe import dataframe_to_rows
+
 
 def read_file_into_dataframe(local_file):
 	conver_dict = {'line_item_usage_account_id': str}
@@ -22,10 +25,14 @@ def enhance_with_metadata(df, team_index_by_account_id):
 		"contact_name": "Julian Subda",
 		"name": "NA"
 	}
-	df['Team'] = df['line_item_usage_account_id'].apply(lambda x: team_index_by_account_id.get(x, core_team)['business_unit'])
-	df['Owner_Name'] = df['line_item_usage_account_id'].apply(lambda x: team_index_by_account_id.get(x, core_team)['contact_name'])
-	df['Owner_Email'] = df['line_item_usage_account_id'].apply(lambda x: team_index_by_account_id.get(x, core_team)['contact_email'])
-	df['Account_Name'] = df['line_item_usage_account_id'].apply(lambda x: team_index_by_account_id.get(x, core_team)['name'])
+	df['Team'] = df['line_item_usage_account_id'].apply(
+		lambda x: team_index_by_account_id.get(x, core_team)['business_unit'])
+	df['Owner_Name'] = df['line_item_usage_account_id'].apply(
+		lambda x: team_index_by_account_id.get(x, core_team)['contact_name'])
+	df['Owner_Email'] = df['line_item_usage_account_id'].apply(
+		lambda x: team_index_by_account_id.get(x, core_team)['contact_email'])
+	df['Account_Name'] = df['line_item_usage_account_id'].apply(
+		lambda x: team_index_by_account_id.get(x, core_team)['name'])
 
 
 def make_team_lookup(teams):
@@ -57,10 +64,13 @@ def report(query_results_file, report_output_path, query_parameters):
 		accountIds = team['accountIds']
 		bu = team['business_unit']
 
+		index = ['year', 'month', 'line_item_usage_account_id', 'Account_Name', 'Team', 'Owner_Name', 'Owner_Email',
+				 'line_item_product_code']
+
 		billing_temp = df.query(
 			f'year == [{year}] and month == [{month}] and (line_item_usage_account_id in {accountIds})')
 		billing = pd.pivot_table(billing_temp,
-								 index=['year', 'month', 'line_item_usage_account_id', 'Team', 'line_item_product_code'],
+								 index=index,
 								 values=['line_item_blended_cost'], aggfunc=[np.sum], fill_value=0, margins=True,
 								 margins_name='Total')
 
@@ -88,14 +98,24 @@ def aggregate(query_results_file, query_parameters, summary_output_file):
 	enhance_with_metadata(df, team_index_by_account_id)
 
 	df = df.groupby(
-		['year', 'month', 'line_item_usage_account_id', 'Account_Name', 'Team', 'Owner_Name', 'Owner_Email', 'line_item_product_code']).sum().reset_index()
+		['year', 'month', 'line_item_usage_account_id', 'Account_Name', 'Team', 'Owner_Name', 'Owner_Email',
+		 'line_item_product_code']).sum().reset_index()
 
-	fieldnames = ['Year', 'Month', 'Account ID', 'Account Name', 'Billing Group', 'Owner Name', 'Owner Email', 'AWS Service']
+	fieldnames = ['Year', 'Month', 'Account ID', 'Account Name', 'Billing Group', 'Owner Name', 'Owner Email',
+				  'AWS Service']
 
-	with open(summary_output_file, 'w', newline='') as csvfile:
-		line_item_writer = csv.writer(csvfile, delimiter=',', quotechar='"', quoting=csv.QUOTE_ALL)
-		line_item_writer.writerow(fieldnames)
+	wb = Workbook()
+	ws = wb.active
 
-		for index, row in df.iterrows():
-			line_item_writer.writerow([row['year'], row['month'], row['line_item_usage_account_id'], row['Account_Name'], row['Team'], row['Owner_Name'], row['Owner_Email'],
-									   row['line_item_product_code'], "{:10.4f}".format(row['line_item_blended_cost'])])
+	for r in dataframe_to_rows(df, index=True, header=True):
+		ws.append(r)
+
+	wb.save(f"{summary_output_file}.xlsx")
+
+# with open(summary_output_file, 'w', newline='') as csvfile:
+# 	line_item_writer = csv.writer(csvfile, delimiter=',', quotechar='"', quoting=csv.QUOTE_ALL)
+# 	line_item_writer.writerow(fieldnames)
+#
+# 	for index, row in df.iterrows():
+# 		line_item_writer.writerow([row['year'], row['month'], row['line_item_usage_account_id'], row['Account_Name'], row['Team'], row['Owner_Name'], row['Owner_Email'],
+# 								   row['line_item_product_code'], "{:10.4f}".format(row['line_item_blended_cost'])])
