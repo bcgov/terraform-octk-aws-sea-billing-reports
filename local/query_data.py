@@ -13,7 +13,7 @@ def query(query_parameters, database, s3_output):
        SELECT
         line_item_usage_account_id, line_item_product_code, line_item_blended_cost, year, month
         FROM cost_and_usage_report
-        WHERE year = '{query_parameters['year']}' and month = '{query_parameters['month']}'
+        WHERE year = '{query_parameters['start_year']}' and month = '{query_parameters['start_month']}'
         and line_item_blended_cost > 0
     """)
 

@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from datetime import datetime
 
 import boto3
 from progress.bar import Bar
@@ -29,6 +30,68 @@ class BillingManager:
 
 		return data
 
+	def create_query_parameters(self, start_month, end_month):
+		org_client = boto3.client('organizations')
+
+		# {
+		# 	'Accounts': [
+		# 		{
+		# 			'Id': 'string',
+		# 			'Arn': 'string',
+		# 			'Email': 'string',
+		# 			'Name': 'string',
+		# 			'Status': 'ACTIVE'|'SUSPENDED',
+		# 			'JoinedMethod': 'INVITED'|'CREATED',
+		# 			'JoinedTimestamp': datetime(2015, 1, 1)
+		# 		},
+		# 	],
+		# 	'NextToken': 'string'
+		# }
+
+		accounts_response = org_client.list_accounts()
+		accounts = []
+
+		for account in accounts_response['Accounts']:
+			tags_response = org_client.list_tags_for_resource(
+				ResourceId=account['Id']
+			)
+
+			transposed_tags = {}
+
+			for tag in tags_response['Tags']:
+				transposed_tag = {
+					tag['Key']: tag['Value']
+				}
+				transposed_tags.update(transposed_tag)
+
+			account_details = {
+				"arn": account['Arn'],
+				"email": account['Email'],
+				"id": account['Id'],
+				"name": account['Name'],
+				"status": account['Status']
+			}
+
+			account_details.update(transposed_tags)
+			accounts.append(account_details)
+
+		logger.debug(json.dumps(accounts))
+		print(json.dumps(accounts))
+
+	# {
+	# 	'Tags': [
+	# 		{
+	# 			'Key': 'string',
+	# 			'Value': 'string'
+	# 		},
+	# 	],
+	# 	'NextToken': 'string'
+	# }
+	# tags = client.list_tags_for_resource(
+	# 	ResourceId='string',
+	# 	NextToken='string'
+	# )
+
 	def run_query(self):
 		self.display_step("Querying data...")
 		return query_data.query(self.query_parameters, self.database, self.s3_output)
@@ -48,12 +111,12 @@ class BillingManager:
 		self.display_step("Summarizing query results...")
 		summary_file_name = query_results_output_file_local_path.split('/')[::-1][0]
 		summary_file_full_path = f"{self.summary_output_dir}/charges-{summary_file_name}"
-		summarize_charges.aggregate(query_results_output_file_local_path, self.query_parameters, summary_file_full_path)
+		summarize_charges.aggregate(query_results_output_file_local_path, self.billing_group_mapping, summary_file_full_path)
 		logger.debug(f"Summarize data output file is '{summary_file_full_path}")
 
 	def reports(self, query_results_output_file_local_path):
 		self.display_step("Generating reports...")
-		summarize_charges.report(query_results_output_file_local_path, self.report_output_dir, self.query_parameters)
+		summarize_charges.report(query_results_output_file_local_path, self.report_output_dir, self.billing_group_mapping)
 
 	def do(self):
 		output_file_name = self.run_query()
@@ -65,7 +128,7 @@ class BillingManager:
 		self.summarize(query_results_output_file_local_path)
 		self.reports(query_results_output_file_local_path)
 
-	def __init__(self, input_file='teams.json'):
+	def __init__(self, query_parameters, input_file='teams.json'):
 		# The database to which the query belongs
 		self.database = os.environ.get("ATHENA_DATABASE", "athenacurcfn_cost_and_usage_report")
 
@@ -76,7 +139,9 @@ class BillingManager:
 		self.s3 = boto3.resource('s3')
 
 		self.display_step("Reading query parameters.")
-		self.query_parameters = self.read_input_file(input_file)
+		self.billing_group_mapping = self.read_input_file(input_file)
+
+		self.query_parameters = query_parameters
 
 		current_dir = os.path.dirname(os.path.realpath(__file__))
 		output_dir = f"{current_dir}/output"
@@ -93,7 +158,17 @@ class BillingManager:
 
 def main():
 	print("Billing!")
-	bill_manager = BillingManager()
+
+	query_parameters = {
+		"start_year": datetime.today().year,
+		"start_month": datetime.today().month - 1,
+		"end_year": datetime.today().year,
+		"end_month": datetime.today().month
+	}
+
+	bill_manager = BillingManager(query_parameters)
+	# bill_manager.create_query_parameters(4, 4)
+
 	bill_manager.do()
 
 
