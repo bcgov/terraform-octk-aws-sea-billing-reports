@@ -30,7 +30,7 @@ class BillingManager:
 
 		return data
 
-	def create_query_parameters(self, start_month, end_month):
+	def query_org_accounts(self):
 		org_client = boto3.client('organizations')
 
 		# {
@@ -49,48 +49,45 @@ class BillingManager:
 		# }
 
 		accounts_response = org_client.list_accounts()
+
+		# Create a reusable Paginator
+		paginator = org_client.get_paginator('list_accounts')
+
+		# Create a PageIterator from the Paginator
+		page_iterator = paginator.paginate()
+
 		accounts = []
 
-		for account in accounts_response['Accounts']:
-			tags_response = org_client.list_tags_for_resource(
-				ResourceId=account['Id']
-			)
+		for page in page_iterator:
 
-			transposed_tags = {}
+			for account in page['Accounts']:
+				tags_response = org_client.list_tags_for_resource(
+					ResourceId=account['Id']
+				)
 
-			for tag in tags_response['Tags']:
-				transposed_tag = {
-					tag['Key']: tag['Value']
+				transposed_tags = {}
+
+				for tag in tags_response['Tags']:
+					transposed_tag = {
+						tag['Key']: tag['Value']
+					}
+					transposed_tags.update(transposed_tag)
+
+				account_details = {
+					"arn": account['Arn'],
+					"email": account['Email'],
+					"id": account['Id'],
+					"name": account['Name'],
+					"status": account['Status']
 				}
-				transposed_tags.update(transposed_tag)
 
-			account_details = {
-				"arn": account['Arn'],
-				"email": account['Email'],
-				"id": account['Id'],
-				"name": account['Name'],
-				"status": account['Status']
-			}
+				account_details.update(transposed_tags)
+				accounts.append(account_details)
 
-			account_details.update(transposed_tags)
-			accounts.append(account_details)
+		# logger.debug(json.dumps(accounts))
+		# print(json.dumps(accounts))
 
-		logger.debug(json.dumps(accounts))
-		print(json.dumps(accounts))
-
-	# {
-	# 	'Tags': [
-	# 		{
-	# 			'Key': 'string',
-	# 			'Value': 'string'
-	# 		},
-	# 	],
-	# 	'NextToken': 'string'
-	# }
-	# tags = client.list_tags_for_resource(
-	# 	ResourceId='string',
-	# 	NextToken='string'
-	# )
+		return accounts
 
 	def run_query(self):
 		self.display_step("Querying data...")
@@ -111,12 +108,13 @@ class BillingManager:
 		self.display_step("Summarizing query results...")
 		summary_file_name = query_results_output_file_local_path.split('/')[::-1][0]
 		summary_file_full_path = f"{self.summary_output_dir}/charges-{summary_file_name}"
-		summarize_charges.aggregate(query_results_output_file_local_path, self.billing_group_mapping, summary_file_full_path)
+		summarize_charges.aggregate(query_results_output_file_local_path, self.org_accounts, summary_file_full_path)
 		logger.debug(f"Summarize data output file is '{summary_file_full_path}")
 
 	def reports(self, query_results_output_file_local_path):
 		self.display_step("Generating reports...")
-		summarize_charges.report(query_results_output_file_local_path, self.report_output_dir, self.billing_group_mapping)
+		summarize_charges.report(query_results_output_file_local_path, self.report_output_dir, self.org_accounts,
+								 self.query_parameters)
 
 	def do(self):
 		output_file_name = self.run_query()
@@ -139,7 +137,8 @@ class BillingManager:
 		self.s3 = boto3.resource('s3')
 
 		self.display_step("Reading query parameters.")
-		self.billing_group_mapping = self.read_input_file(input_file)
+		# self.billing_group_mapping = self.read_input_file(input_file)
+		self.org_accounts = self.query_org_accounts()
 
 		self.query_parameters = query_parameters
 
@@ -163,7 +162,7 @@ def main():
 		"start_year": datetime.today().year,
 		"start_month": datetime.today().month - 1,
 		"end_year": datetime.today().year,
-		"end_month": datetime.today().month
+		"end_month": 4
 	}
 
 	bill_manager = BillingManager(query_parameters)
