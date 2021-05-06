@@ -1,17 +1,16 @@
+import argparse
 import json
 import logging
 import os
 from datetime import datetime
 
 import boto3
-from progress.bar import Bar
+from botocore.exceptions import ClientError
 
 import query_data
 import summarize_charges
 
 from pathlib import Path
-
-from fabulous import text
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +23,6 @@ class BillingManager:
 
 	@staticmethod
 	def read_input_file(teams_file):
-		data = None
 		with open(teams_file) as f:
 			data = json.load(f)
 
@@ -33,27 +31,9 @@ class BillingManager:
 	def query_org_accounts(self):
 		org_client = boto3.client('organizations')
 
-		# {
-		# 	'Accounts': [
-		# 		{
-		# 			'Id': 'string',
-		# 			'Arn': 'string',
-		# 			'Email': 'string',
-		# 			'Name': 'string',
-		# 			'Status': 'ACTIVE'|'SUSPENDED',
-		# 			'JoinedMethod': 'INVITED'|'CREATED',
-		# 			'JoinedTimestamp': datetime(2015, 1, 1)
-		# 		},
-		# 	],
-		# 	'NextToken': 'string'
-		# }
-
-		accounts_response = org_client.list_accounts()
-
-		# Create a reusable Paginator
+		# we have lots of accounts - use a Paginator
 		paginator = org_client.get_paginator('list_accounts')
 
-		# Create a PageIterator from the Paginator
 		page_iterator = paginator.paginate()
 
 		accounts = []
@@ -84,9 +64,6 @@ class BillingManager:
 				account_details.update(transposed_tags)
 				accounts.append(account_details)
 
-		# logger.debug(json.dumps(accounts))
-		# print(json.dumps(accounts))
-
 		return accounts
 
 	def run_query(self):
@@ -102,42 +79,48 @@ class BillingManager:
 		s3_output_metadata_file = self.s3.Object(self.s3_bucket, "{output_file_name}.metadata")
 		s3_output_metadata_file.delete()
 
+		self.display_step(f"Downloaded output file to '{output_file_local_path}'")
+
 		return output_file_local_path
 
 	def summarize(self, query_results_output_file_local_path):
 		self.display_step("Summarizing query results...")
 		summary_file_name = query_results_output_file_local_path.split('/')[::-1][0]
-		summary_file_full_path = f"{self.summary_output_dir}/charges-{summary_file_name}"
+		summary_file_full_path = f"{self.summary_output_dir}/charges-{summary_file_name}".replace("csv", "xlsx")
 		summarize_charges.aggregate(query_results_output_file_local_path, self.org_accounts, summary_file_full_path)
+
 		logger.debug(f"Summarize data output file is '{summary_file_full_path}")
+		self.display_step(f"Summarized data stored at '{summary_file_full_path}'")
 
 	def reports(self, query_results_output_file_local_path):
 		self.display_step("Generating reports...")
 		summarize_charges.report(query_results_output_file_local_path, self.report_output_dir, self.org_accounts,
 								 self.query_parameters)
 
-	def do(self):
-		output_file_name = self.run_query()
-		logger.debug(f"output_file_name is '{output_file_name}'")
+	def do(self, existing_file=None):
 
-		query_results_output_file_local_path = self.download_query_results(output_file_name)
-		logger.debug(f"query_results_output_file_local_path is '{query_results_output_file_local_path}'")
+		query_results_output_file_local_path = existing_file
+
+		if not query_results_output_file_local_path:
+			output_file_name = self.run_query()
+			logger.debug(f"output_file_name = '{output_file_name}'")
+
+			query_results_output_file_local_path = self.download_query_results(output_file_name)
+		else:
+			self.display_step(f"Skipping query.  Processing local file '{query_results_output_file_local_path}'")
+
+		logger.debug(f"query_results_output_file_local_path = '{query_results_output_file_local_path}'")
 
 		self.summarize(query_results_output_file_local_path)
 		self.reports(query_results_output_file_local_path)
 
-	def __init__(self, query_parameters, input_file='teams.json'):
+	def __init__(self, query_parameters, athena_database="athenacurcfn_cost_and_usage_report", query_output_bucket="bcgov-aws-sea-billing-reports" ):
 		# The database to which the query belongs
-		self.database = os.environ.get("ATHENA_DATABASE", "athenacurcfn_cost_and_usage_report")
+		self.database = athena_database
 
-		# S3 output Bucket name - where the results of the athena query is stored as a csv file
-		self.s3_bucket = os.environ.get("S3_BUCKET", "billing-reports-334132478648")
-		self.s3_output = 's3://' + self.s3_bucket  # S3 Bucket to store results
+		self.init_s3(query_output_bucket)
 
-		self.s3 = boto3.resource('s3')
-
-		self.display_step("Reading query parameters.")
-		# self.billing_group_mapping = self.read_input_file(input_file)
+		self.display_step("Discovering accounts in organization...")
 		self.org_accounts = self.query_org_accounts()
 
 		self.query_parameters = query_parameters
@@ -154,23 +137,41 @@ class BillingManager:
 		self.report_output_dir = f"{output_dir}/reports"
 		Path(self.report_output_dir).mkdir(parents=True, exist_ok=True)
 
+	def init_s3(self, query_output_bucket):
+		# S3 output Bucket name - where the results of the athena query is stored as a csv file
+		self.s3_bucket = query_output_bucket
 
-def main():
+		# S3 Bucket to store results
+		self.s3_output = 's3://' + self.s3_bucket
+
+		self.s3 = boto3.resource('s3')
+
+		s3client = boto3.client("s3")
+
+		try:
+			s3client.head_bucket(Bucket=query_output_bucket)
+		except ClientError:
+			# bucket doesn't exist (or we have no access). try to create it below
+			s3client.create_bucket(Bucket=query_output_bucket,
+								   CreateBucketConfiguration={'LocationConstraint': s3client.meta.region_name})
+
+def main(params):
 	print("Billing!")
 
 	query_parameters = {
-		"start_year": datetime.today().year,
-		"start_month": datetime.today().month - 1,
-		"end_year": datetime.today().year,
-		"end_month": 4
+		"year": params.year,
+		"month": params.month
 	}
 
 	bill_manager = BillingManager(query_parameters)
-	# bill_manager.create_query_parameters(4, 4)
 
-	bill_manager.do()
+	bill_manager.do(existing_file=params.query_results_local_file)
 
 
 if __name__ == "__main__":
-	logger.setLevel(logging.DEBUG)
-	main()
+	logger.setLevel(logging.ERROR)
+	parser = argparse.ArgumentParser(description='Processing billing data.')
+	parser.add_argument('-y', '--year', type=int, default=datetime.today().year, help='The year for which we are interested in producing billing summary data and reports. If not specified, the current year is assumed.')
+	parser.add_argument('-m', '--month', type=int, default=datetime.today().month, help='The month in the year (-y/--year) for which we are interested in producing billing suammary data and reports. If not specified, the current month is assumed.')
+	parser.add_argument('-q', '--query_results_local_file', type=str, help='Full path to an existing, query output file in CSV format on the local system. If not specified, an Athena query will be performed, and the query results file will be downloaded to the local system.')
+	main(parser.parse_args())

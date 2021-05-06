@@ -76,9 +76,9 @@ override.tf.json
 # Ignore CLI configuration files
 .terraformrc
 terraform.rc
-/terraform/aws/backend.tf
+/terraform/backend.tf
 /local/output/
 /local/teams.json
 /reports/
 /billing_report_input.json
-/terraform/aws/variables.tfvars
+/terraform/variables.tfvars
