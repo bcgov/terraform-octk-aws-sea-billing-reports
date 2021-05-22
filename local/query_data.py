@@ -8,10 +8,11 @@ athena = boto3.client('athena')
 
 
 def query(query_parameters, database, s3_output):
+	# @todo add product_product_name column
 	# SQL Query to execute
 	query = (f"""
        SELECT
-        line_item_usage_account_id, line_item_product_code, line_item_blended_cost, year, month
+        line_item_usage_account_id, line_item_product_code, product_product_name, line_item_blended_cost, year, month
         FROM cost_and_usage_report
         WHERE year = '{query_parameters['year']}' and month = '{query_parameters['month']}'
         and line_item_blended_cost > 0
