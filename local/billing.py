@@ -2,6 +2,7 @@ import argparse
 import json
 import logging
 import os
+import re
 from datetime import datetime
 
 import boto3
@@ -36,6 +37,23 @@ class BillingManager:
 
 		page_iterator = paginator.paginate()
 
+		core_billing_group_tags = {
+			"billing_group": "SEA Core",
+			"admin_contact_email": "julian.subda@gov.bc.ca",
+			"admin_contact_name": "Julian Subda",
+			"Project": "Landing Zone Core",
+			"Environment": "Core"
+		}
+
+		def get_account_name_element(account_deets, element_index):
+			account_email = account_deets['email']
+			account_name = account_deets['name']
+
+			if re.search("app", account_email):
+				return account_name.split("-")[element_index]
+			else:
+				return account_name
+
 		accounts = []
 
 		for page in page_iterator:
@@ -62,6 +80,13 @@ class BillingManager:
 				}
 
 				account_details.update(transposed_tags)
+
+				if not transposed_tags.get('billing_group', None):
+					logger.debug(f"Account '{account_details['id']}' missing metadata tags; applying defaults.")
+					account_details.update(core_billing_group_tags)
+
+				account_details['license_plate'] = get_account_name_element(account_details, 0)
+
 				accounts.append(account_details)
 
 		return accounts
@@ -87,7 +112,8 @@ class BillingManager:
 		self.display_step("Summarizing query results...")
 		summary_file_name = query_results_output_file_local_path.split('/')[::-1][0]
 		summary_file_full_path = f"{self.summary_output_dir}/charges-{summary_file_name}".replace("csv", "xlsx")
-		summarize_charges.aggregate(query_results_output_file_local_path, self.org_accounts, summary_file_full_path)
+		summarize_charges.aggregate(query_results_output_file_local_path, self.org_accounts, summary_file_full_path,
+									self.org_accounts)
 
 		logger.debug(f"Summarize data output file is '{summary_file_full_path}")
 		self.display_step(f"Summarized data stored at '{summary_file_full_path}'")
@@ -114,7 +140,8 @@ class BillingManager:
 		self.summarize(query_results_output_file_local_path)
 		self.reports(query_results_output_file_local_path)
 
-	def __init__(self, query_parameters, athena_database="athenacurcfn_cost_and_usage_report", query_output_bucket="bcgov-aws-sea-billing-reports" ):
+	def __init__(self, query_parameters, athena_database="athenacurcfn_cost_and_usage_report",
+				 query_output_bucket="bcgov-aws-sea-billing-reports"):
 		# The database to which the query belongs
 		self.database = athena_database
 
@@ -155,6 +182,7 @@ class BillingManager:
 			s3client.create_bucket(Bucket=query_output_bucket,
 								   CreateBucketConfiguration={'LocationConstraint': s3client.meta.region_name})
 
+
 def main(params):
 	print("Billing!")
 
@@ -171,7 +199,10 @@ def main(params):
 if __name__ == "__main__":
 	logger.setLevel(logging.ERROR)
 	parser = argparse.ArgumentParser(description='Processing billing data.')
-	parser.add_argument('-y', '--year', type=int, default=datetime.today().year, help='The year for which we are interested in producing billing summary data and reports. If not specified, the current year is assumed.')
-	parser.add_argument('-m', '--month', type=int, default=datetime.today().month, help='The month in the year (-y/--year) for which we are interested in producing billing suammary data and reports. If not specified, the current month is assumed.')
-	parser.add_argument('-q', '--query_results_local_file', type=str, help='Full path to an existing, query output file in CSV format on the local system. If not specified, an Athena query will be performed, and the query results file will be downloaded to the local system.')
+	parser.add_argument('-y', '--year', type=int, default=datetime.today().year,
+						help='The year for which we are interested in producing billing summary data and reports. If not specified, the current year is assumed.')
+	parser.add_argument('-m', '--month', type=int, default=datetime.today().month,
+						help='The month in the year (-y/--year) for which we are interested in producing billing suammary data and reports. If not specified, the current month is assumed.')
+	parser.add_argument('-q', '--query_results_local_file', type=str,
+						help='Full path to an existing, query output file in CSV format on the local system. If not specified, an Athena query will be performed, and the query results file will be downloaded to the local system.')
 	main(parser.parse_args())

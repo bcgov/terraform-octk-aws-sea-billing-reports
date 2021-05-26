@@ -111,6 +111,12 @@ optional arguments:
                         downloaded to the local system.
 ```
 
+Running the utility will create files in 3 folders within the current directory:
+- `output/query_output/xxxx-12323345-ytyy.csv`  # *LARGE* CSV file containing all, fine-grained billing records for specified period
+- `output/summarized/`charges-xxxx-12323345-ytyy.xls`  # Excel file containing summarized billing records for all billing groups for specified period
+- `output/summarized/`charges-BILLING_GROUP_NAME-xxxx-12323345-ytyy.xls`  # Excel files containing summarized billing records (one file for each  BILLING_GROUP) for specified period
+- `output/reports/YYYY-MM-BILLING_GROUP_NAME.html`  # HTML billing report (pivot table), with charges grouped by account and service; one per billing group fro the specified period  
+
 ## Getting Help or Reporting an Issue
 
 <!--- Example below, modify accordingly --->
