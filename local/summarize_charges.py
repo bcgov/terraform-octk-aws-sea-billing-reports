@@ -1,5 +1,7 @@
 import logging
 import os
+from collections import defaultdict
+from datetime import date
 
 import numpy as np
 import pandas as pd
@@ -85,51 +87,63 @@ def make_account_by_id_lookup(accounts):
 	return team_details_by_account_id
 
 
-def report(query_results_file, report_output_path, accounts, query_parameters):
-	month = query_parameters['month']
-	year = query_parameters['year']
+def report(query_results_file, report_output_path, accounts, query_parameters, cb):
 
 	df = read_file_into_dataframe(query_results_file, accounts)
 
 	billing_groups = set([account['billing_group'] for account in accounts])
 
 	for billing_group in billing_groups:
-		billing_temp = df.query(f'year == [{year}] and month == [{month}] and (Billing_Group == "{billing_group}")')
+		billing_temp = df.query(f'(Billing_Group == "{billing_group}")')
 
 		billing = pd.pivot_table(billing_temp,
 								 index=grouping_columns,
 								 values=['line_item_blended_cost', 'CAD'], aggfunc=[np.sum], fill_value=0, margins=True,
 								 margins_name='Total')
 
+		# todo pre-render
 		env = Environment(loader=FileSystemLoader('.'))
-		template = env.get_template("report.html")
+		template = env.get_template("templates/report.html.jinja2")
 
 		template_vars = {
-			"title": "AWS Report",
+			"title": "Cloud Pathfinder Tenant Team Cloud Service Consumption Report (AWS)",
 			"pivot_table": billing.to_html(),
-			"business_unit": billing_group
+			"business_unit": billing_group,
+			"start_date": query_parameters['start_date'],
+			"end_date": query_parameters['end_date']
 		}
 
 		html_out = template.render(template_vars)
 
-		report_name = f"{year}-{month}-{billing_group}.html"
+		format_string = "%Y-%m-%d"
+		report_name = f"{date.strftime(query_parameters['start_date'], format_string)}-{date.strftime(query_parameters['end_date'], format_string)}-{billing_group}.html"
 		report_file_name = f"{report_output_path}/{report_name}"
 
 		with open(report_file_name, "w") as text_file:
 			text_file.write(html_out)
 
+		# invoke callback to pass back generated file to caller for current billing group
+		cb(billing_group, report_file_name)
 
-def aggregate(query_results_file, query_parameters, summary_output_file, accounts):
-	df = read_file_into_dataframe(query_results_file, query_parameters)
 
-	create_excel(df, summary_output_file)
+def aggregate(query_results_file, summary_output_path, accounts, query_parameters, cb):
+	df = read_file_into_dataframe(query_results_file, accounts)
+
+	format_string = "%Y-%m-%d"
+	filename_prefix = f"{date.strftime(query_parameters['start_date'], format_string)}-{date.strftime(query_parameters['end_date'], format_string)}"
+
+	create_excel(df, f"{summary_output_path}/charges-{filename_prefix}-ALL.xlsx")
 
 	billing_groups = set([account['billing_group'] for account in accounts])
 
 	for billing_group in billing_groups:
 		group_df = df.query(f'Billing_Group == "{billing_group}"')
-		create_excel(group_df, summary_output_file.replace("charges-", f"charges-{billing_group}-"))
 
+		excel_output_path = f"{summary_output_path}/charges-{filename_prefix}-{billing_group}.xlsx"
+		create_excel(group_df, excel_output_path)
+		logger.debug(f"Done with  billing group '{billing_group}'...")
+		# invoke callback to pass back generated file to caller for current billing group
+		cb(billing_group, excel_output_path)
 
 def create_excel(df, summary_output_file):
 	df = df.groupby(grouping_columns).sum().reset_index()
