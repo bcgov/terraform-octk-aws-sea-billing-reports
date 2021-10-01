@@ -354,7 +354,7 @@ if __name__ == "__main__":
 	billing_period_subparser.set_defaults(func=handle_billing_period)
 
 	parser.add_argument('-d', '--deliver', type=bool, default=False, help='True/False value inidicating whether email delivery should be done.')
-	parser.add_argument('-ro', '--recipient_override', type=str, help='Email address (typically for testing/veriification) to which reports will be delivered instead of account admins.')
+	parser.add_argument('-ro', '--recipient_override', type=str, help='Email address (typically for testing/verification) to which reports will be delivered instead of account admins.')
 	parser.add_argument('-cc', '--carbon_copy', type=str, help='Email address to which reports will be delivered to, in addition to other recipients.')
 	parser.add_argument('-bgs', '--billing_groups', type=str, help='Comma-separated list of billing groups for which to process billing data.')
 	parser.add_argument('-ll', '--log_level', type=str,

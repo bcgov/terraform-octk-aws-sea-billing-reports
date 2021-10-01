@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 
-# OCTK AWS SEA Billing Utiilty
+# OCTK AWS SEA Billing Utility
 
 This repo provides tooling to help process billing data from an AWS SEA into more usable forms including monthly
 tenant "bills".
@@ -12,80 +12,21 @@ tenant "bills".
 - [x] Development
 - [ ] Production/Maintenance
 
+## Background
+
+At one point, there were two billing-related utilities contained in this repo. One was based on a step-function/lambda model running in AWS.  The other - which actually used much of the python code from the lambda version - is more of a "classic" script that can be easily run on a developer or admin's local workstation, or (eventually) in a container, as described [here](https://github.com/bcgov/cloud-pathfinder/issues/1068).
+
 ## Getting Started
 
-There are two billing-related utilities contained in this repo. One is a set terraform configs contained withing
-the `terraform` directory. We'll call this the "cloud" billing utility, since associated code executes *within* the AWS
-environment. The other is contained in the `local` directory. We'll call this the "local" billing utility since
-associated code executes *locally* on a user's workstation.
+For historical reasons (see above), the current billing utility is contained in the `local` directory. 
 
-### Cloud Billing Utility
+### Additional Pre-requisites
 
-The Cloud Billing Utility can be deployed into an AWS SEA's management/root account using terraform as follows:
-
-```shell
-$ cd terraform
-#populate shell with admin-level IAM credentials prior to running below, or prefix command below with AWS_PROFILE=-...  
-$ terraform plan -var-file=variables.tfvars
-
-$ terraform apply -var-file=variables.tfvars
-```
-
-Once installed as above, the Cloud Billing Utility can be used as follows to generate billing reports within AWS:
-
-```shell
-$ aws stepfunctions start-execution --state-machine-arn arn:aws:states:ca-central-1:<root_account id>:stateMachine:process-cur-workflow --input "$(cat billing_report_input.json)" 
-```
-
-#### Input file
-
-The above `billing_report_input_json` file has a format matching the one below.  This file may be produced manually, or using the terraform module at http://github.com/bcdevops/terraform-octk-aws-organization-info-extended.
-
-```json
-{
-	"month": 2,
-	"year": 2021,
-	"teams": [
-		{
-			"accountIds": [
-				"123456789",
-				"901235234"
-			],
-			"business_unit": "ABC",
-			"contact_email": "abc@gov.bc.ca",
-			"contact_name": "Abc Abc"
-		},
-		{
-			"accountIds": [
-				"2345678990",
-				"5432154321"
-			],
-			"business_unit": "PQR",
-			"contact_email": "pqr@gov.bc.ca",
-			"contact_name": "Pqr Pqr"
-		}
-	]
-}
-```
-
-#### Output
-
-Running the command above will trigger the execution of a sequence of step functions that will query billing data, process it, and output the processed date in a report form *for each billing* for the month/year specified in the input file.
-
-The output files - a set of HTML reports - can be downloaded using the command below:
-
-```shell
-aws s3 cp s3://billing-reports-<root_account_id>/reports/ ./reports –recursive
-```
-
-
-### Local Billing Utility
-
-The Local Utility provides similar functionality to the Cloud Billing Utility but uses a refactored version of the code that is simpler to test and adapt, and somewhat reduces the reliance on native AWS services.  While this version works well for AWS billing, it may also provide a starting point for processing billing data from other sources as well.
+The billing utility requires that Athena has been set up to query "Cost and Usage Reports" as described [here](https://docs.aws.amazon.com/cur/latest/userguide/cur-query-athena.html).
 
 #### Set up local environment
 
->Note: The Local Billing Utility is built using python3 and creating a dedicated `virtualenv` is recommended.
+>Note: The Local Billing Utility is built using python3 and uses several open source libraries. Creating a dedicated `virtualenv` (as described [here](https://docs.python.org/3/library/venv.html) is recommended to avoid conflicts/clashes with other python applications and libraries on your machine.
 
 ```shell
 $ cd local
@@ -94,28 +35,39 @@ $ pip install -r requirements.txt
 
 #### Usage / Options
 
-> Prerequisite: Prior to running utility, your local shell *must* be populated with IAM credentials that have sufficient permission to read AWS account information via the organization API.  The reason is that the utility requires an account metadata lookup structure and it creates it dynamically on each execution  by using the organizations API.
+> Prerequisite: The utility requires access to credentials with appropriate permissions to perform all the AWS operations required. The utility accesses credentials using any of the mechanisms supported by `boto3`, the AWS API library it uses.  For example, by using a credentials file, and optionally, the `AWS_PROFILE` environment variable, or by specifying credentials directly via AWS_* environment variables set in your shell.  More details/examples are available in the [boto3 docs](https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html). The specific permission required include reading from the `organizations` API, reading/writing to `s3` buckets, executing `athena` queries, and accessing `ses` APIs to send email.  Ultimately, a purpose-defined role should be created for the purposes of running this script,as described [here](https://github.com/bcgov/cloud-pathfinder/issues/1067).
 
 ```shell
-usage: billing.py [-h] [-y YEAR] [-m MONTH] [-q QUERY_RESULTS_LOCAL_FILE]
+usage: billing [-h] [-d DELIVER] [-ro RECIPIENT_OVERRIDE] [-cc CARBON_COPY] [-bgs BILLING_GROUPS] [-ll LOG_LEVEL] [-q QUERY_RESULTS_LOCAL_FILE] {date,dt,weekly,w,billperiod,bp} ...
 
 Processing billing data.
 
+positional arguments:
+  {date,dt,weekly,w,billperiod,bp}
+
 optional arguments:
   -h, --help            show this help message and exit
-  -y YEAR, --year YEAR  The year for which we are interested in producing billing summary data and reports. If not specified, the current year is assumed.
-  -m MONTH, --month MONTH
-                        The month in the year (-y/--year) for which we are interested in producing billing suammary data and reports. If not specified, the current month is assumed.
+  -d DELIVER, --deliver DELIVER
+                        True/False value inidicating whether email delivery should be done.
+  -ro RECIPIENT_OVERRIDE, --recipient_override RECIPIENT_OVERRIDE
+                        Email address (typically for testing/verification) to which reports will be delivered instead of account admins.
+  -cc CARBON_COPY, --carbon_copy CARBON_COPY
+                        Email address to which reports will be delivered to, in addition to other recipients.
+  -bgs BILLING_GROUPS, --billing_groups BILLING_GROUPS
+                        Comma-separated list of billing groups for which to process billing data.
+  -ll LOG_LEVEL, --log_level LOG_LEVEL
+                        Specify logging level. Example --loglevel debug
   -q QUERY_RESULTS_LOCAL_FILE, --query_results_local_file QUERY_RESULTS_LOCAL_FILE
                         Full path to an existing, query output file in CSV format on the local system. If not specified, an Athena query will be performed, and the query results file will be
                         downloaded to the local system.
+
 ```
 
-Running the utility will create files in 3 folders within the current directory:
-- `output/query_output/xxxx-12323345-ytyy.csv`  # *LARGE* CSV file containing all, fine-grained billing records for specified period
-- `output/summarized/`charges-xxxx-12323345-ytyy.xls`  # Excel file containing summarized billing records for all billing groups for specified period
-- `output/summarized/`charges-BILLING_GROUP_NAME-xxxx-12323345-ytyy.xls`  # Excel files containing summarized billing records (one file for each  BILLING_GROUP) for specified period
-- `output/reports/YYYY-MM-BILLING_GROUP_NAME.html`  # HTML billing report (pivot table), with charges grouped by account and service; one per billing group fro the specified period  
+Running the utility will create files in folders structure below, nested within the `local` directory:
+- `output/<guid>/query_results/query_results.csv`  # *LARGE* CSV file containing all, fine-grained billing records for specified period
+- `output/<guid>/summarized/charges-YYYY-MM-DD-YYYY-DD-MM-ALL.xls`  # Excel file containing summarized billing records for ALL billing groups for specified period
+- `output/<guid>/summarized/charges-YYYY-MM-DD-YYYY-DD-MM-<BILLING_GROUP_NAME>.xls`  # Excel files containing summarized billing records (one file for each  BILLING_GROUP) for specified period.
+- `output/<guid>/reports/YYYY-MM--DD-YYYY-MM-DD-BILLING_GROUP_NAME.html`  # HTML billing report (pivot table) for each billing group, with charges grouped by account and service.  
 
 ## Getting Help or Reporting an Issue
 
