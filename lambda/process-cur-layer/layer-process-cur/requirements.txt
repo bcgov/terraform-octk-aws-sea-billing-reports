@@ -1,5 +1,0 @@
-retrying
-pandas
-numpy
-pytz
-jinja2
