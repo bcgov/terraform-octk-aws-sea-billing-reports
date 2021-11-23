@@ -77,8 +77,14 @@ override.tf.json
 .terraformrc
 terraform.rc
 /terraform/backend.tf
-/local/output/
-/local/teams.json
+/billing-report-utility/output/
+/billing-report-utility/teams.json
 /reports/
 /billing_report_input.json
 /terraform/variables.tfvars
+
+# Ignore products of local billing-report-utility environment build
+/bin
+/lib
+/pyenv.cfg
+pyvenv.cfg
