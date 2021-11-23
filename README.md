@@ -16,7 +16,7 @@ tenant "bills".
 
 At one point, there were two billing-related utilities contained in this repo. One was based on a step-function/lambda model running in AWS.  The other - which actually used much of the python code from the lambda version - is more of a "classic" script that can be easily run on a developer or admin's local workstation, or (eventually) in a container, as described [here](https://github.com/bcgov/cloud-pathfinder/issues/1068).
 
-The next iteration included a docker runnable billing utility, see below. This avoids storing large report outputs locally and is a step towards [sending automated billing reports via cloudwatch events](https://github.com/bcgov/cloud-pathfinder/issues/1068).
+The next iteration included a docker runnable billing utility, see below. This avoids storing large report CSVs and other outputs being store locally, and is a step towards [sending automated billing reports via cloudwatch events](https://github.com/bcgov/cloud-pathfinder/issues/1068).
 
 ## Getting Started
 
