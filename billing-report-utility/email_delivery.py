@@ -62,11 +62,11 @@ class EmailDelivery:
 
 def main():
 	emailer = EmailDelivery()
-	email_result =emailer.send_email(sender="info@cloud.gov.bc.ca", recipient="shea.phillips@brightcoast.ca", subject="Hello SES!",
-									 body_text="Yo yo yo.", attachments="output/1a323611-e4a4-4743-acad-0b9f91249669/reports/2021-06-01-2021-06-30-CPF.html")
-	print(email_result)
+	# email_result =emailer.send_email(sender="info@cloud.gov.bc.ca", recipient="max.wardle@gov.bc.ca", subject="Hello SES!",
+	# 								 body_text="Yo yo yo.", attachments="output/1a323611-e4a4-4743-acad-0b9f91249669/reports/2021-06-01-2021-06-30-CPF.html")
+	# print(email_result)
 
-	email_result =emailer.send_email(sender="info@cloud.gov.bc.ca", recipient="shea.phillips@brightcoast.ca", subject="Hello SES!",
+	email_result =emailer.send_email(sender="info@cloud.gov.bc.ca", recipient="max.wardle@gov.bc.ca", subject="Hello SES!",
 									 body_text="Yo yo yo. (no attachment)")
 
 	print(email_result)
