@@ -97,19 +97,28 @@ class BillingManager:
 
 		return accounts
 
+	def format_account_info(self):
+		formatted_account_info = ""
+		for account in self.org_accounts:
+			formatted_account_info = formatted_account_info + "\n" + account["license_plate"] + "-" + account["Environment"] + " - " + account["name"]
+		return formatted_account_info
+
 	def deliver_reports(self):
 		if self.delivery_config:
 
 			for billing_group, attachments in self.delivery_outbox.items():
 				billing_group_email = self.emails_for_billing_groups.get(billing_group).pop()
 				recipient_email = self.delivery_config.get("recipient_override") or billing_group_email
+				# TODO: add total cost here
 				subject = self.delivery_config.get("subject") or f"Cloud Pathfinder Cloud Service Consumption Report for {self.query_parameters['start_date'].strftime('%d-%m-%Y')} to {self.query_parameters['end_date'].strftime('%d-%m-%Y')}."
 
+				# TODO: add list of project sets here -> use "org_accounts" -> need a reduced list based on billing groups
 				# todo implement HTML email body
 				body_text = self.template.render({
 					"start_date" : self.query_parameters.get("start_date"),
 					"end_date" : self.query_parameters.get("end_date"),
-					"billing_group_email" : billing_group_email
+					"billing_group_email" : billing_group_email,
+					"list_of_accounts": self.format_account_info()
 				})
 
 				logger.debug(f"Sending email to '{recipient_email}' with subject '{subject}'")
@@ -161,8 +170,8 @@ class BillingManager:
 	def summarize(self, query_results_output_file_local_path, summary_output_path):
 		self.display_step("Summarizing query results...")
 
-		summarize_charges.aggregate(query_results_output_file_local_path, summary_output_path, self.org_accounts, self.query_parameters,
-									self.queue_attachment)
+		summarize_charges.aggregate(query_results_output_file_local_path, summary_output_path, self.org_accounts,
+									self.query_parameters, self.queue_attachment)
 
 		self.display_step(f"Summarized data stored at '{summary_output_path}'")
 
@@ -228,6 +237,7 @@ class BillingManager:
 		env = Environment(loader=FileSystemLoader('.'))
 		self.template = env.get_template("./templates/email_body.jinja2")
 
+		# TODO: create something similar for names, and project names or whatever thats called
 		# create a lookup to allow us to easily derive the "owner" email address for a given billing group
 		self.emails_for_billing_groups = defaultdict(set)
 		for account in self.org_accounts:
