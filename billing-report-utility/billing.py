@@ -97,28 +97,47 @@ class BillingManager:
 
 		return accounts
 
-	def format_account_info(self):
-		formatted_account_info = ""
+	def create_project_set_lookup(self):
+		project_set_lookup = {}
 		for account in self.org_accounts:
-			formatted_account_info = formatted_account_info + "\n" + account["license_plate"] + "-" + account["Environment"] + " - " + account["name"]
+			# TODO: sorting by license_plate doesn't handle core accounts
+			if ( account["license_plate"] in project_set_lookup):
+				project_set_lookup[account["license_plate"]].append(account)
+			else :
+				project_set_lookup[account["license_plate"]] = [account]
+		return project_set_lookup
+
+	def format_project_set_info (self, project_set) :
+		formatted_project_set = project_set[0]["Project"] + "\n"
+		for account in project_set :
+			# NOTE: "name" is the same as "license_plate"-"Environment"
+			formatted_project_set += "  - " + account["id"] + " - " + account["name"] + "\n"
+		return formatted_project_set
+
+	def format_account_info_for_email(self, billing_group):
+		formatted_account_info = ""
+		project_set_lookup = self.create_project_set_lookup()
+		for project_set in project_set_lookup :
+			if (project_set_lookup[project_set][0]["billing_group"] == billing_group) :
+				formatted_account_info += "\n" + self.format_project_set_info(project_set_lookup[project_set])
 		return formatted_account_info
 
-	def deliver_reports(self):
+	def deliver_reports(self, billing_group_totals):
 		if self.delivery_config:
 
 			for billing_group, attachments in self.delivery_outbox.items():
 				billing_group_email = self.emails_for_billing_groups.get(billing_group).pop()
 				recipient_email = self.delivery_config.get("recipient_override") or billing_group_email
-				# TODO: add total cost here
+
 				subject = self.delivery_config.get("subject") or f"Cloud Pathfinder Cloud Service Consumption Report for {self.query_parameters['start_date'].strftime('%d-%m-%Y')} to {self.query_parameters['end_date'].strftime('%d-%m-%Y')}."
 
-				# TODO: add list of project sets here -> use "org_accounts" -> need a reduced list based on billing groups
-				# todo implement HTML email body
+				# TODO: implement HTML email body
 				body_text = self.template.render({
-					"start_date" : self.query_parameters.get("start_date"),
-					"end_date" : self.query_parameters.get("end_date"),
-					"billing_group_email" : billing_group_email,
-					"list_of_accounts": self.format_account_info()
+					"billing_group_email" 	: billing_group_email,
+					"start_date" 						: self.query_parameters.get("start_date"),
+					"end_date" 							: self.query_parameters.get("end_date"),
+					"billing_group_total" 	: billing_group_totals.get(billing_group),
+					"list_of_accounts"			: self.format_account_info_for_email(billing_group)
 				})
 
 				logger.debug(f"Sending email to '{recipient_email}' with subject '{subject}'")
@@ -178,8 +197,10 @@ class BillingManager:
 	def reports(self, query_results_output_file_local_path, report_output_dir):
 		self.display_step("Generating reports...")
 
-		summarize_charges.report(query_results_output_file_local_path, report_output_dir, self.org_accounts,
-								 self.query_parameters, self.queue_attachment)
+		billing_group_totals = summarize_charges.report(query_results_output_file_local_path, report_output_dir, self.org_accounts,
+									self.query_parameters, self.queue_attachment)
+
+		return billing_group_totals
 
 	def do(self, existing_file=None):
 
@@ -209,9 +230,9 @@ class BillingManager:
 
 		reports_local_path = f"{base_output_path}/{self.reports_dir_name}"
 		Path(reports_local_path).mkdir(parents=True, exist_ok=True)
-		self.reports(query_results_output_file_local_path, reports_local_path)
+		billing_group_totals = self.reports(query_results_output_file_local_path, reports_local_path)
 
-		self.deliver_reports()
+		self.deliver_reports(billing_group_totals)
 
 	def __init__(self, query_parameters, athena_database="athenacurcfn_cost_and_usage_report",
 				 query_output_bucket="bcgov-aws-sea-billing-reports", delivery_config=None):
@@ -237,7 +258,6 @@ class BillingManager:
 		env = Environment(loader=FileSystemLoader('.'))
 		self.template = env.get_template("./templates/email_body.jinja2")
 
-		# TODO: create something similar for names, and project names or whatever thats called
 		# create a lookup to allow us to easily derive the "owner" email address for a given billing group
 		self.emails_for_billing_groups = defaultdict(set)
 		for account in self.org_accounts:

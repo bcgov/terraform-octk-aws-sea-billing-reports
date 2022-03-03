@@ -12,12 +12,12 @@
       "program": "billing.py",
       "console": "integratedTerminal",
       /*
-      NOTE: You'll have to set the following env vars "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_DEFAULT_REGION"
+      NOTE: You'll have to set the following env vars in the debugger terminal:
+        "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_DEFAULT_REGION"
         As well as "FX_API_KEY" or if the api is down "FX_RATE"
-        See README for details
-      NOTE: If you specify "--deliver=False" in the "args" below this will evaluate to a non empty string "False" which will be interpreted as True
-        If you don't want to send emails omit this flag, it defaults to False anyways
-        This is just the way this python debugger interperates arguments -> always a string
+      NOTE: DO NOT specify "--deliver=False" in the "args" below this will evaluate to a non empty string "False" which will be interpreted as True
+        If you don't want to send emails then omit this flag, it defaults to False anyways
+        This is just the way this vs code python debugger interperates arguments -> always a string
       */
       "args": [/*"--deliver", "True",*/ "--recipient_override", "max.wardle@gov.bc.ca", "weekly"]
     }

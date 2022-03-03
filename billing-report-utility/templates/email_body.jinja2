@@ -2,7 +2,9 @@ Hello {{billing_group_email}},
 
 Please find attached your billing reports for the period from {{ start_date.strftime('%d-%m-%Y') }} to {{ end_date.strftime('%d-%m-%Y') }}.
 
-Charges were applied for the following accounts:
+Total Charges: ${{billing_group_total}} CAD
+
+Projects:
 {{list_of_accounts}}
 
 Regards,
