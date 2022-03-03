@@ -129,7 +129,7 @@ class BillingManager:
 				billing_group_email = self.emails_for_billing_groups.get(billing_group).pop()
 				recipient_email = self.delivery_config.get("recipient_override") or billing_group_email
 
-				subject = self.delivery_config.get("subject") or f"Cloud Pathfinder Cloud Service Consumption Report for {self.query_parameters['start_date'].strftime('%d-%m-%Y')} to {self.query_parameters['end_date'].strftime('%d-%m-%Y')}."
+				subject = self.delivery_config.get("subject") or f"Cloud Consumption Report ${billing_group_totals.get(billing_group)} for {self.query_parameters['start_date'].strftime('%d-%m-%Y')} to {self.query_parameters['end_date'].strftime('%d-%m-%Y')}."
 
 				# TODO: implement HTML email body
 				body_text = self.template.render({
