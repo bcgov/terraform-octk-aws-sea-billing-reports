@@ -133,11 +133,11 @@ class BillingManager:
 
 				# TODO: implement HTML email body
 				body_text = self.template.render({
-					"billing_group_email" 	: billing_group_email,
-					"start_date" 						: self.query_parameters.get("start_date"),
-					"end_date" 							: self.query_parameters.get("end_date"),
-					"billing_group_total" 	: billing_group_totals.get(billing_group),
-					"list_of_accounts"			: self.format_account_info_for_email(billing_group)
+					"billing_group_email" : billing_group_email,
+					"start_date" : self.query_parameters.get("start_date"),
+					"end_date" : self.query_parameters.get("end_date"),
+					"billing_group_total" : billing_group_totals.get(billing_group),
+					"list_of_accounts" : self.format_account_info_for_email(billing_group)
 				})
 
 				logger.debug(f"Sending email to '{recipient_email}' with subject '{subject}'")
