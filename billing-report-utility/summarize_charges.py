@@ -93,8 +93,15 @@ def report(query_results_file, report_output_path, accounts, query_parameters, c
 
 	billing_groups = set([account['billing_group'] for account in accounts])
 
+	# Total CAD for each billing group, returned to put in email body.
+	billing_group_totals = {}
+
 	for billing_group in billing_groups:
 		billing_temp = df.query(f'(Billing_Group == "{billing_group}")')
+
+		sum_all_columns = billing_temp.sum(axis=0, skipna=True, numeric_only=True)
+		sum_cad = sum_all_columns["CAD"]
+		billing_group_totals[billing_group] = round(sum_cad, 2)
 
 		billing = pd.pivot_table(billing_temp,
 								 index=grouping_columns,
@@ -125,6 +132,7 @@ def report(query_results_file, report_output_path, accounts, query_parameters, c
 		# invoke callback to pass back generated file to caller for current billing group
 		cb(billing_group, report_file_name)
 
+	return billing_group_totals
 
 def aggregate(query_results_file, summary_output_path, accounts, query_parameters, cb):
 	df = read_file_into_dataframe(query_results_file, accounts)

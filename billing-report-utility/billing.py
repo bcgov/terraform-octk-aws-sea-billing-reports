@@ -97,19 +97,47 @@ class BillingManager:
 
 		return accounts
 
-	def deliver_reports(self):
+	def create_project_set_lookup(self):
+		project_set_lookup = {}
+		for account in self.org_accounts:
+			# TODO: sorting by license_plate doesn't handle core accounts
+			if ( account["license_plate"] in project_set_lookup):
+				project_set_lookup[account["license_plate"]].append(account)
+			else :
+				project_set_lookup[account["license_plate"]] = [account]
+		return project_set_lookup
+
+	def format_project_set_info (self, project_set) :
+		formatted_project_set = project_set[0]["Project"] + "\n"
+		for account in project_set :
+			# NOTE: "name" is the same as "license_plate"-"Environment"
+			formatted_project_set += "  - " + account["id"] + " - " + account["name"] + "\n"
+		return formatted_project_set
+
+	def format_account_info_for_email(self, billing_group):
+		formatted_account_info = ""
+		project_set_lookup = self.create_project_set_lookup()
+		for project_set in project_set_lookup :
+			if (project_set_lookup[project_set][0]["billing_group"] == billing_group) :
+				formatted_account_info += "\n" + self.format_project_set_info(project_set_lookup[project_set])
+		return formatted_account_info
+
+	def deliver_reports(self, billing_group_totals):
 		if self.delivery_config:
 
 			for billing_group, attachments in self.delivery_outbox.items():
 				billing_group_email = self.emails_for_billing_groups.get(billing_group).pop()
 				recipient_email = self.delivery_config.get("recipient_override") or billing_group_email
-				subject = self.delivery_config.get("subject") or f"Cloud Pathfinder Cloud Service Consumption Report for {self.query_parameters['start_date'].strftime('%d-%m-%Y')} to {self.query_parameters['end_date'].strftime('%d-%m-%Y')}."
 
-				# todo implement HTML email body
+				subject = self.delivery_config.get("subject") or f"Cloud Consumption Report ${billing_group_totals.get(billing_group)} for {self.query_parameters['start_date'].strftime('%d-%m-%Y')} to {self.query_parameters['end_date'].strftime('%d-%m-%Y')}."
+
+				# TODO: implement HTML email body
 				body_text = self.template.render({
+					"billing_group_email" : billing_group_email,
 					"start_date" : self.query_parameters.get("start_date"),
 					"end_date" : self.query_parameters.get("end_date"),
-					"billing_group_email" : billing_group_email
+					"billing_group_total" : billing_group_totals.get(billing_group),
+					"list_of_accounts" : self.format_account_info_for_email(billing_group)
 				})
 
 				logger.debug(f"Sending email to '{recipient_email}' with subject '{subject}'")
@@ -161,16 +189,18 @@ class BillingManager:
 	def summarize(self, query_results_output_file_local_path, summary_output_path):
 		self.display_step("Summarizing query results...")
 
-		summarize_charges.aggregate(query_results_output_file_local_path, summary_output_path, self.org_accounts, self.query_parameters,
-									self.queue_attachment)
+		summarize_charges.aggregate(query_results_output_file_local_path, summary_output_path, self.org_accounts,
+									self.query_parameters, self.queue_attachment)
 
 		self.display_step(f"Summarized data stored at '{summary_output_path}'")
 
 	def reports(self, query_results_output_file_local_path, report_output_dir):
 		self.display_step("Generating reports...")
 
-		summarize_charges.report(query_results_output_file_local_path, report_output_dir, self.org_accounts,
-								 self.query_parameters, self.queue_attachment)
+		billing_group_totals = summarize_charges.report(query_results_output_file_local_path, report_output_dir, self.org_accounts,
+									self.query_parameters, self.queue_attachment)
+
+		return billing_group_totals
 
 	def do(self, existing_file=None):
 
@@ -200,9 +230,9 @@ class BillingManager:
 
 		reports_local_path = f"{base_output_path}/{self.reports_dir_name}"
 		Path(reports_local_path).mkdir(parents=True, exist_ok=True)
-		self.reports(query_results_output_file_local_path, reports_local_path)
+		billing_group_totals = self.reports(query_results_output_file_local_path, reports_local_path)
 
-		self.deliver_reports()
+		self.deliver_reports(billing_group_totals)
 
 	def __init__(self, query_parameters, athena_database="athenacurcfn_cost_and_usage_report",
 				 query_output_bucket="bcgov-aws-sea-billing-reports", delivery_config=None):
@@ -353,7 +383,7 @@ if __name__ == "__main__":
 	billing_period_subparser.add_argument('-b', '--billing_period', type=date.fromisoformat)
 	billing_period_subparser.set_defaults(func=handle_billing_period)
 
-	parser.add_argument('-d', '--deliver', type=bool, default=False, help='True/False value inidicating whether email delivery should be done.')
+	parser.add_argument('-d', '--deliver', type=bool, default=False, help='True/False value indicating whether email delivery should be done.')
 	parser.add_argument('-ro', '--recipient_override', type=str, help='Email address (typically for testing/verification) to which reports will be delivered instead of account admins.')
 	parser.add_argument('-cc', '--carbon_copy', type=str, help='Email address to which reports will be delivered to, in addition to other recipients.')
 	parser.add_argument('-bgs', '--billing_groups', type=str, help='Comma-separated list of billing groups for which to process billing data.')

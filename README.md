@@ -61,6 +61,7 @@ billing-utility
   - `weekly` is the type of run so it will just look at billing reports from a week ago today
 - The `AWS_*` vars are from an AWS account with permissions as described in the "Prerequisite" in the "Usage / Options" section below
 - `FX_API_KEY` is the key obtained from [Fixer](https://fixer.io/) which provides accurate, current exchange rates
+  - Occasionally this free service will go down but this can be circumnavigated by setting the exchange rate from USD to CAD directly using the env var `FX_RATE`
 
 #### Usage / Options
 
