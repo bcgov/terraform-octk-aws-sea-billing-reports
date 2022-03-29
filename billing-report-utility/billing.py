@@ -124,35 +124,52 @@ class BillingManager:
 
 	def deliver_reports(self, billing_group_totals):
 		if self.delivery_config:
-
-			for billing_group, attachments in self.delivery_outbox.items():
-				billing_group_email = self.emails_for_billing_groups.get(billing_group).pop()
-				recipient_email = self.delivery_config.get("recipient_override") or billing_group_email
-
-				subject = self.delivery_config.get("subject") or f"Cloud Consumption Report ${billing_group_totals.get(billing_group)} for {self.query_parameters['start_date'].strftime('%d-%m-%Y')} to {self.query_parameters['end_date'].strftime('%d-%m-%Y')}."
-
-				# TODO: implement HTML email body
-				body_text = self.template.render({
-					"billing_group_email" : billing_group_email,
-					"start_date" : self.query_parameters.get("start_date"),
-					"end_date" : self.query_parameters.get("end_date"),
-					"billing_group_total" : billing_group_totals.get(billing_group),
-					"list_of_accounts" : self.format_account_info_for_email(billing_group)
-				})
-
-				logger.debug(f"Sending email to '{recipient_email}' with subject '{subject}'")
-
-				if "carbon_copy" in self.query_parameters:
-					logger.debug(f"Email carbon copy will be sent to '{self.query_parameters['carbon_copy']}'.")
+			# We don't want to accedentally send quarterly reports to clients.
+			if self.quarterly_report_config:
+				recipient_email = self.delivery_config.get("recipient_override") or "cloud.pathfinder@gov.bc.ca"
+				subject = self.delivery_config.get("subject") or f"Cloud Consumption Quarterly Report for {self.quarterly_report_config.get('year')}, Quarter {self.quarterly_report_config.get('quarter')}."
+				body_text=f"Attached is the quarterly report for {self.quarterly_report_config.get('year')}, Quarter {self.quarterly_report_config.get('quarter')}."
+				attachment = self.delivery_outbox.get("QUARTERLY_REPORT")
 
 				email_result = self.emailer.send_email(sender="info@cloud.gov.bc.ca",
-													   recipient=recipient_email,
-													   subject=subject,
-													   cc=self.query_parameters.get('carbon_copy'),
-													   body_text=body_text,
-													   attachments=attachments)
+															recipient=recipient_email,
+															subject=subject,
+															cc=self.query_parameters.get('carbon_copy'),
+															body_text=body_text,
+															attachments=attachment)
 
 				logger.debug(f"Email result: {email_result}.")
+
+			# We want to send emails to clients about their account spending.
+			else:
+				for billing_group, attachments in self.delivery_outbox.items():
+					billing_group_email = self.emails_for_billing_groups.get(billing_group).pop()
+					recipient_email = self.delivery_config.get("recipient_override") or billing_group_email
+
+					subject = self.delivery_config.get("subject") or f"Cloud Consumption Report ${billing_group_totals.get(billing_group)} for {self.query_parameters['start_date'].strftime('%d-%m-%Y')} to {self.query_parameters['end_date'].strftime('%d-%m-%Y')}."
+
+
+					body_text = self.template.render({
+						"billing_group_email" : billing_group_email,
+						"start_date" : self.query_parameters.get("start_date"),
+						"end_date" : self.query_parameters.get("end_date"),
+						"billing_group_total" : billing_group_totals.get(billing_group),
+						"list_of_accounts" : self.format_account_info_for_email(billing_group)
+					})
+
+					logger.debug(f"Sending email to '{recipient_email}' with subject '{subject}'")
+
+					if "carbon_copy" in self.query_parameters:
+						logger.debug(f"Email carbon copy will be sent to '{self.query_parameters['carbon_copy']}'.")
+
+					email_result = self.emailer.send_email(sender="info@cloud.gov.bc.ca",
+															recipient=recipient_email,
+															subject=subject,
+															cc=self.query_parameters.get('carbon_copy'),
+															body_text=body_text,
+															attachments=attachments)
+
+					logger.debug(f"Email result: {email_result}.")
 		else:
 			logger.debug("Skipping email delivery.")
 
@@ -198,7 +215,7 @@ class BillingManager:
 		self.display_step("Generating reports...")
 
 		billing_group_totals = summarize_charges.report(query_results_output_file_local_path, report_output_dir, self.org_accounts,
-									self.query_parameters, self.queue_attachment)
+									self.query_parameters, self.queue_attachment, self.quarterly_report_config)
 
 		return billing_group_totals
 
@@ -235,7 +252,7 @@ class BillingManager:
 		self.deliver_reports(billing_group_totals)
 
 	def __init__(self, query_parameters, athena_database="athenacurcfn_cost_and_usage_report",
-				 query_output_bucket="bcgov-aws-sea-billing-reports", delivery_config=None):
+				 query_output_bucket="bcgov-aws-sea-billing-reports", delivery_config=None, quarterly_report_config=None):
 		# The database to which the query belongs
 		self.database = athena_database
 
@@ -254,6 +271,8 @@ class BillingManager:
 
 		self.delivery_config = delivery_config
 		self.delivery_outbox = defaultdict(set)
+
+		self.quarterly_report_config = quarterly_report_config
 
 		env = Environment(loader=FileSystemLoader('.'))
 		self.template = env.get_template("./templates/email_body.jinja2")
@@ -299,6 +318,7 @@ def main(params):
 	print("Cloud Pathfinder Billing Utility!")
 
 	deliver = params.get('deliver', False)
+	quarter = params.get('quarter', 0)
 
 	delivery_config = None
 	if deliver:
@@ -307,7 +327,14 @@ def main(params):
 			"recipient_override": params.get("recipient_override")
 		}
 
-	bill_manager = BillingManager(params, delivery_config=delivery_config)
+	quarterly_report_config = None
+	if (1 <= quarter <= 4) :
+		quarterly_report_config = {
+			"quarter": quarter,
+			"year": params.get('year')
+		}
+
+	bill_manager = BillingManager(params, delivery_config=delivery_config, quarterly_report_config=quarterly_report_config)
 
 	bill_manager.do(existing_file=params['query_results_local_file'])
 
@@ -353,6 +380,36 @@ if __name__ == "__main__":
 
 		return args
 
+	def handle_quarterly(args):
+		billing_period_start = date.today()
+		billing_period_end = date.today()
+
+		if (args['quarter'] == 1) :
+			billing_period_start = date(args['year'], 4, 1)
+			billing_period_end = date(args['year'], 7, 1)
+		elif (args['quarter'] == 2) :
+			billing_period_start = date(args['year'], 7, 1)
+			billing_period_end = date(args['year'], 10, 1)
+		elif (args['quarter'] == 3) :
+			billing_period_start = date(args['year'], 10, 1)
+			next_year = args['year'] + 1
+			billing_period_end = date(next_year, 1, 1)
+		elif (args['quarter'] == 4) :
+			billing_period_start = date(args['year'], 1, 1)
+			billing_period_end = date(args['year'], 4, 1)
+		else :
+			raise "The \"--quarter\" flag must be a number from 1 - 4"
+
+		# set to start of day
+		billing_period_start = datetime.combine(billing_period_start, datetime.min.time(), tzinfo=timezone.utc)
+		# set to start of day
+		billing_period_end = datetime.combine(billing_period_end, datetime.min.time(), tzinfo=timezone.utc)
+
+		args['start_date'] = billing_period_start
+		args['end_date'] = billing_period_end
+
+		return args
+
 	def configure_logging(level_string):
 		levels = {
 			'critical': logging.CRITICAL,
@@ -378,6 +435,11 @@ if __name__ == "__main__":
 
 	weekly_subparser = subparsers.add_parser('weekly', aliases=['w'])
 	weekly_subparser.set_defaults(func=handle_weekly)
+
+	quarterly_subparser = subparsers.add_parser('quarterly', aliases=['q'])
+	quarterly_subparser.add_argument('-qu', '--quarter', type=int )
+	quarterly_subparser.add_argument('-y', '--year', type=int )
+	quarterly_subparser.set_defaults(func=handle_quarterly)
 
 	billing_period_subparser = subparsers.add_parser('billperiod', aliases=['bp'])
 	billing_period_subparser.add_argument('-b', '--billing_period', type=date.fromisoformat)
