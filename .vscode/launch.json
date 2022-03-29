@@ -11,6 +11,7 @@
       "cwd": "${workspaceFolder}/billing-report-utility",
       "program": "billing.py",
       "console": "integratedTerminal",
+
       /*
       NOTE: You'll have to set the following env vars in the debugger terminal:
         "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_DEFAULT_REGION"
@@ -19,7 +20,20 @@
         If you don't want to send emails then omit this flag, it defaults to False anyways
         This is just the way this vs code python debugger interperates arguments -> always a string
       */
-      "args": [/*"--deliver", "True",*/ "--recipient_override", "max.wardle@gov.bc.ca", "weekly"]
+
+      "args": [
+        // "--deliver", "True",
+        "--recipient_override", "max.wardle@gov.bc.ca",
+        // "--query_results_local_file", "/Users/mwardle/Documents/bcgov/terraform-octk-aws-sea-billing-reports/billing-report-utility/output/0d235075-c9cb-4743-adef-4ac760f120ca/query_results/query_results.csv",
+        "weekly",
+      ]
+
+      // "args": [
+      //   // "--deliver", "True",
+      //   "--recipient_override", "max.wardle@gov.bc.ca",
+      //   // "--query_results_local_file", "/Users/mwardle/Documents/bcgov/terraform-octk-aws-sea-billing-reports/billing-report-utility/output/0d235075-c9cb-4743-adef-4ac760f120ca/query_results/query_results.csv",
+      //   "quarterly", "--quarter", "4", "--year", "2022"
+      // ]
     }
   ]
 }

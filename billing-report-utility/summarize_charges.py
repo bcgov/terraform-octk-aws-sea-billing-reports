@@ -87,13 +87,13 @@ def make_account_by_id_lookup(accounts):
 	return team_details_by_account_id
 
 
-def report(query_results_file, report_output_path, accounts, query_parameters, cb):
+def report(query_results_file, report_output_path, accounts, query_parameters, cb, quarterly_report_config):
 
 	df = read_file_into_dataframe(query_results_file, accounts)
 
 	billing_groups = set([account['billing_group'] for account in accounts])
 
-	# Total CAD for each billing group, returned to put in email body.
+	# Total CAD for each billing group
 	billing_group_totals = {}
 
 	for billing_group in billing_groups:
@@ -132,6 +132,13 @@ def report(query_results_file, report_output_path, accounts, query_parameters, c
 		# invoke callback to pass back generated file to caller for current billing group
 		cb(billing_group, report_file_name)
 
+	if quarterly_report_config:
+		report_file_name = f"{report_output_path}/quarterly_report-{quarterly_report_config['year']}-q_{quarterly_report_config['quarter']}.xlsx"
+		create_quarterly_excel(billing_group_totals, report_file_name)
+
+		# invoke callback to pass back generated file to caller for current billing group
+		cb("QUARTERLY_REPORT", report_file_name)
+
 	return billing_group_totals
 
 def aggregate(query_results_file, summary_output_path, accounts, query_parameters, cb):
@@ -152,6 +159,19 @@ def aggregate(query_results_file, summary_output_path, accounts, query_parameter
 		logger.debug(f"Done with  billing group '{billing_group}'...")
 		# invoke callback to pass back generated file to caller for current billing group
 		cb(billing_group, excel_output_path)
+
+def create_quarterly_excel(billing_group_totals, quarterly_output_file):
+	wb = Workbook()
+	ws = wb.active
+
+	ws["A1"] = "Billing Group"
+	ws["B1"] = "Total Spend (CAD)"
+
+	for billing_group, total in billing_group_totals.items() :
+		row = (billing_group, total)
+		ws.append(row)
+
+	wb.save(f"{quarterly_output_file}")
 
 def create_excel(df, summary_output_file):
 	df = df.groupby(grouping_columns).sum().reset_index()
