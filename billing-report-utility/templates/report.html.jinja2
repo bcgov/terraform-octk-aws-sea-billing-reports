@@ -6,8 +6,8 @@
 <body>
 <h1>{{ title }}</h1>
 <h2>Billing Group: {{ business_unit }}</h2>
-<h3>Start date: {{start_date.strftime('%d-%m-%Y %H:%M:%S')}}</h3>
-<h3>End date: {{end_date.strftime('%d-%m-%Y %H:%M:%S')}}</h3>
+<h3>Start date: {{start_date.strftime('%Y-%m-%d %H:%M:%S')}}</h3>
+<h3>End date: {{end_date.strftime('%Y-%m-%d %H:%M:%S')}}</h3>
 {{ pivot_table }}
 
 </body>

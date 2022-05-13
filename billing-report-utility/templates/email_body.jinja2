@@ -1,6 +1,6 @@
 Hello {{billing_group_email}},
 
-Please find attached your billing report for the period from starting at $0 CAD on {{ start_date.strftime('%d-%m-%Y') }} to ${{billing_group_total}} CAD on {{ end_date.strftime('%d-%m-%Y') }}.
+Please find attached your billing report for the period {{ start_date.strftime('%Y-%m-%d') }} to {{ end_date.strftime('%Y-%m-%d') }}, Starting at $0 CAD on {{ start_date.strftime('%Y-%m-%d') }} to ${{billing_group_total}} on {{ end_date.strftime('%Y-%m-%d') }}.
 
 Total Charges: ${{billing_group_total}} CAD
 
