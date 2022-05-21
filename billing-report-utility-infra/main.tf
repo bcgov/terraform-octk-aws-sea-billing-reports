@@ -118,9 +118,9 @@ resource "null_resource" "docker_build" {
       aws ecr get-login-password --region ${data.aws_region.current.name} | docker login \
         --username AWS \
         --password-stdin ${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com
-      docker build -t ${aws_ecr_repository.billing_reports_ecr.repository_url} -f ../Dockerfile ../
+      docker build -t ${local.app_name}-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name} -f ../Dockerfile ../
       docker tag ${local.app_name}-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}:latest ${aws_ecr_repository.billing_reports_ecr.repository_url}:latest
-      docker push ${aws_ecr_repository.billing_reports_ecr.repository_url}
+      docker push ${aws_ecr_repository.billing_reports_ecr.repository_url}:latest
     EOT
   }
 }
@@ -284,12 +284,12 @@ resource "aws_ecs_task_definition" "billing_reports_ecs_task" {
   task_role_arn            = aws_iam_role.ecs_task_role.arn
   runtime_platform {
     operating_system_family = "LINUX"
-    #    cpu_architecture        = "ARM64"
+    cpu_architecture        = "ARM64"
   }
   container_definitions = jsonencode([{
     name       = "${local.app_name}-ecs-container-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}"
     image      = "${aws_ecr_repository.billing_reports_ecr.repository_url}:latest"
-    entryPoint = ["python3", "billing.py"]
+    entryPoint = ["python3", "billing-cpf-1068.py"]
     logConfiguration = {
       logDriver = "awslogs",
       options = {
@@ -368,14 +368,15 @@ resource "aws_iam_role_policy_attachment" "ecs_event_bridge_access" {
   policy_arn = aws_iam_policy.ecs_event_bridge_access_policies.arn
 }
 
-resource "aws_cloudwatch_event_rule" "billing_reports_fiver_rule" {
-  name                = "${local.app_name}-fiver-rule"
-  description         = "Execute the ${local.app_name} every five minutes" // Note: 1900 UTC is 1200 PST
-  schedule_expression = "rate(5 minutes)"
-}
-
 
 ## Mostly used for testing
+#
+#resource "aws_cloudwatch_event_rule" "billing_reports_fiver_rule" {
+#  name                = "${local.app_name}-fiver-rule"
+#  description         = "Execute the ${local.app_name} every five minutes" // Note: 1900 UTC is 1200 PST
+#  schedule_expression = "rate(5 minutes)"
+#}
+
 #resource "aws_cloudwatch_event_target" "billing_reports_fiver_target" {
 #  target_id = "${local.app_name}-fiver-targer"
 #  arn       = aws_ecs_cluster.billing_reports_ecs_cluster.arn
@@ -429,11 +430,12 @@ resource "aws_cloudwatch_event_rule" "billing_reports_fiver_rule" {
 resource "aws_cloudwatch_event_rule" "billing_reports_weekly_rule" {
   name                = "${local.app_name}-weekly-rule"
   description         = "Execute the ${local.app_name} every Friday at noon" // Note: 1900 UTC is 1200 PST
-  schedule_expression = "cron(0 19 ? * FRI *)"
+  schedule_expression = "cron(35 00 * * ? *)"
+#  schedule_expression = "cron(0 19 ? * FRI *)"
 }
 
 resource "aws_cloudwatch_event_target" "billing_reports_weekly_target" {
-  target_id = "${local.app_name}-fiver-targer"
+  target_id = "${local.app_name}-weekly-targer"
   arn       = aws_ecs_cluster.billing_reports_ecs_cluster.arn
   role_arn  = aws_iam_role.ecs_event_bridge_role.arn
   rule      = aws_cloudwatch_event_rule.billing_reports_weekly_rule.name
@@ -485,11 +487,12 @@ resource "aws_cloudwatch_event_target" "billing_reports_weekly_target" {
 resource "aws_cloudwatch_event_rule" "billing_reports_monthly_rule" {
   name                = "${local.app_name}-monthly-rule"
   description         = "Execute the ${local.app_name} at noon on the last day every month" // Note: 1900 UTC is 1200 PST
-  schedule_expression = "cron(0 19 L * ? *)"
+  schedule_expression = "cron(37 00 * * ? *)"
+#  schedule_expression = "cron(0 19 L * ? *)"
 }
 
 resource "aws_cloudwatch_event_target" "billing_reports_monthly_target" {
-  target_id = "${local.app_name}-fiver-targer"
+  target_id = "${local.app_name}-monthly-targer"
   arn       = aws_ecs_cluster.billing_reports_ecs_cluster.arn
   role_arn  = aws_iam_role.ecs_event_bridge_role.arn
   rule      = aws_cloudwatch_event_rule.billing_reports_monthly_rule.name
@@ -501,6 +504,63 @@ resource "aws_cloudwatch_event_target" "billing_reports_monthly_target" {
         {
           "name"  = "REPORT_TYPE",
           "value" = "Monthly"
+        },
+        {
+          "name"  = "DELIVER",
+          "value" = "False"
+        },
+        {
+          "name"  = "RECIPIENT_OVERRIDE",
+          "value" = "hello.123h@hello.123.domain"
+        },
+        {
+          "name"  = "ATHENA_QUERY_OUTPUT_BUCKET",
+          "value" = aws_s3_bucket.athena_query_output_bucket.id
+        },
+        {
+          "name"  = "ATHENA_QUERY_OUTPUT_BUCKET_ARN",
+          "value" = aws_s3_bucket.athena_query_output_bucket.arn
+        }
+      ],
+    }]
+  })
+  ecs_target {
+    task_count              = 1
+    task_definition_arn     = aws_ecs_task_definition.billing_reports_ecs_task.arn
+    launch_type             = "FARGATE"
+    platform_version        = "LATEST"
+    enable_execute_command  = false
+    enable_ecs_managed_tags = false
+
+    network_configuration {
+      security_groups = [aws_security_group.billing_reports_ecs_task_sg.id]
+      subnets         = [for subnet in data.aws_subnet_ids.current.ids : subnet]
+      // TODO: Can you make this false and revise to use NAT for access to ECR and CloudWatch???
+      assign_public_ip = true
+    }
+  }
+}
+
+resource "aws_cloudwatch_event_rule" "billing_reports_quarterly_rule" {
+  name                = "${local.app_name}-quarterly-rule"
+  description         = "Execute the ${local.app_name} quarterly" // Note: 1900 UTC is 1200 PST
+  schedule_expression = "cron(40 00 * * ? *)"
+#  schedule_expression = "cron(0 19 L * ? *)"
+}
+
+resource "aws_cloudwatch_event_target" "billing_reports_quarterly_target" {
+  target_id = "${local.app_name}-quarterly-targer"
+  arn       = aws_ecs_cluster.billing_reports_ecs_cluster.arn
+  role_arn  = aws_iam_role.ecs_event_bridge_role.arn
+  rule      = aws_cloudwatch_event_rule.billing_reports_quarterly_rule.name
+
+  input = jsonencode({
+    containerOverrides = [{
+      name = "${local.app_name}-ecs-container-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}"
+      "environment" = [
+        {
+          "name"  = "REPORT_TYPE",
+          "value" = "Quarterly"
         },
         {
           "name"  = "DELIVER",
