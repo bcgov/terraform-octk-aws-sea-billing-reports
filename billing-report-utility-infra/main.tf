@@ -371,61 +371,69 @@ resource "aws_iam_role_policy_attachment" "ecs_event_bridge_access" {
 
 ## Mostly used for testing
 #
-#resource "aws_cloudwatch_event_rule" "billing_reports_fiver_rule" {
-#  name                = "${local.app_name}-fiver-rule"
-#  description         = "Execute the ${local.app_name} every five minutes" // Note: 1900 UTC is 1200 PST
-#  schedule_expression = "rate(5 minutes)"
-#}
+resource "aws_cloudwatch_event_rule" "billing_reports_fiver_rule" {
+  name                = "${local.app_name}-fiver-rule"
+  description         = "Execute the ${local.app_name} every five minutes"
+  schedule_expression = "rate(3 minutes)"
+}
 
-#resource "aws_cloudwatch_event_target" "billing_reports_fiver_target" {
-#  target_id = "${local.app_name}-fiver-targer"
-#  arn       = aws_ecs_cluster.billing_reports_ecs_cluster.arn
-#  role_arn  = aws_iam_role.ecs_event_bridge_role.arn
-#  rule      = aws_cloudwatch_event_rule.billing_reports_fiver_rule.name
-#
-#  input = jsonencode({
-#    containerOverrides = [{
-#      name = "${local.app_name}-ecs-container-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}"
-#      "environment" = [
-#        {
-#          "name"  = "REPORT_TYPE",
-#          "value" = "Fiver" // Weekly, Monthly, Quarterly
-#        },
-#        {
-#          "name"  = "DELIVER",
-#          "value" = "False"
-#        },
-#        {
-#          "name"  = "RECIPIENT_OVERRIDE",
-#          "value" = "hello.123h@hello.123.domain"
-#        },
-#        {
-#          "name"  = "ATHENA_QUERY_OUTPUT_BUCKET",
-#          "value" = aws_s3_bucket.athena_query_output_bucket.id
-#        },
-#        {
-#          "name"  = "ATHENA_QUERY_OUTPUT_BUCKET_ARN",
-#          "value" = aws_s3_bucket.athena_query_output_bucket.arn
-#        }
-#      ],
-#    }]
-#  })
-#  ecs_target {
-#    task_count              = 1
-#    task_definition_arn     = aws_ecs_task_definition.billing_reports_ecs_task.arn
-#    launch_type             = "FARGATE"
-#    platform_version        = "LATEST"
-#    enable_execute_command  = false
-#    enable_ecs_managed_tags = false
-#
-#    network_configuration {
-#      security_groups = [aws_security_group.billing_reports_ecs_task_sg.id]
-#      subnets         = [for subnet in data.aws_subnet_ids.current.ids : subnet]
-#      // TODO: Can you make this false and revise to use NAT for access to ECR and CloudWatch???
-#      assign_public_ip = true
-#    }
-#  }
-#}
+resource "aws_cloudwatch_event_target" "billing_reports_fiver_target" {
+  target_id = "${local.app_name}-fiver-targer"
+  arn       = aws_ecs_cluster.billing_reports_ecs_cluster.arn
+  role_arn  = aws_iam_role.ecs_event_bridge_role.arn
+  rule      = aws_cloudwatch_event_rule.billing_reports_fiver_rule.name
+
+  input = jsonencode({
+    containerOverrides = [{
+      name = "${local.app_name}-ecs-container-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}"
+      "environment" = [
+        {
+          "name"  = "REPORT_TYPE",
+          "value" = "Weekly"
+        },
+        {
+          "name"  = "DELIVER",
+          "value" = "False"
+        },
+        {
+          "name"  = "RECIPIENT_OVERRIDE",
+          "value" = "hello.123h@hello.123.domain"
+        },
+        {
+          "name"  = "ATHENA_QUERY_OUTPUT_BUCKET",
+          "value" = aws_s3_bucket.athena_query_output_bucket.id
+        },
+        {
+          "name"  = "ATHENA_QUERY_OUTPUT_BUCKET_ARN",
+          "value" = aws_s3_bucket.athena_query_output_bucket.arn
+        },
+        {
+          "name" = "ATHENA_QUERY_ROLE_TO_ASSUME_ARN",
+          "value" = "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Athena-Cost-and-Usage-Report",
+        },
+        {
+          "name" = "ATHENA_QUERY_DATABASE",
+          "value" = "athenacurcfn_cost_and_usage_report",
+        }
+      ],
+    }]
+  })
+  ecs_target {
+    task_count              = 1
+    task_definition_arn     = aws_ecs_task_definition.billing_reports_ecs_task.arn
+    launch_type             = "FARGATE"
+    platform_version        = "LATEST"
+    enable_execute_command  = false
+    enable_ecs_managed_tags = false
+
+    network_configuration {
+      security_groups = [aws_security_group.billing_reports_ecs_task_sg.id]
+      subnets         = [for subnet in data.aws_subnet_ids.current.ids : subnet]
+      // TODO: Can you make this false and revise to use NAT for access to ECR and CloudWatch???
+      assign_public_ip = true
+    }
+  }
+}
 
 resource "aws_cloudwatch_event_rule" "billing_reports_weekly_rule" {
   name                = "${local.app_name}-weekly-rule"
@@ -463,6 +471,10 @@ resource "aws_cloudwatch_event_target" "billing_reports_weekly_target" {
         {
           "name"  = "ATHENA_QUERY_OUTPUT_BUCKET_ARN",
           "value" = aws_s3_bucket.athena_query_output_bucket.arn
+        },
+        {
+          "name" = "ATHENA_QUERY_ROLE_TO_ASSUME_ARN",
+          "value" = "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Athena-Cost-and-Usage-Report",
         }
       ],
     }]
@@ -520,6 +532,10 @@ resource "aws_cloudwatch_event_target" "billing_reports_monthly_target" {
         {
           "name"  = "ATHENA_QUERY_OUTPUT_BUCKET_ARN",
           "value" = aws_s3_bucket.athena_query_output_bucket.arn
+        },
+        {
+          "name" = "ATHENA_QUERY_ROLE_TO_ASSUME_ARN",
+          "value" = "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Athena-Cost-and-Usage-Report",
         }
       ],
     }]
@@ -577,6 +593,10 @@ resource "aws_cloudwatch_event_target" "billing_reports_quarterly_target" {
         {
           "name"  = "ATHENA_QUERY_OUTPUT_BUCKET_ARN",
           "value" = aws_s3_bucket.athena_query_output_bucket.arn
+        },
+        {
+          "name" = "ATHENA_QUERY_ROLE_TO_ASSUME_ARN",
+          "value" = "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Athena-Cost-and-Usage-Report",
         }
       ],
     }]
