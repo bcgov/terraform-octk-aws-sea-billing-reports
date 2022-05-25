@@ -3,10 +3,8 @@ import os
 import sys
 import logging
 import requests
-import boto3
-from botocore.exceptions import ClientError
-from datetime import date, datetime, timezone, timedelta, tzinfo
 
+from datetime import date, datetime, timezone, timedelta, tzinfo
 # from BillingManager import BillingManager
 
 logger = logging.getLogger(__name__)
@@ -37,6 +35,10 @@ def weekly(event_bridge_params):
 	})
 
 	logger.info(f"event_bridge_params_updated: {event_bridge_params}\n")
+
+	# bill_manager = BillingManager(event_bridge_params)
+	# s3_buckets = bill_manager.query_s3_buckets()
+	# logger.info(f"Weekly S3 bucket query: {s3_buckets}")
 
 	# bill_manager = BillingManager(
 	# 	event_bridge_params,
@@ -119,12 +121,17 @@ def quarterly(event_bridge_params):
 def main():
 	print("Cloud Pathfinder Billing Utility!")
 
+	logger.info(f"Environment Variables: {json.dumps(dict(os.environ))}")
+
+	metadata_uri_v4 = os.environ.get("ECS_CONTAINER_METADATA_URI_V4")
+	get_v4_metadata = requests.get(format(metadata_uri_v4))
+	v4_metadata = get_v4_metadata.json()
+	logger.info(f"V4 Metadata: {json.dumps(v4_metadata)}")
+
 	event_bridge_payload = {
 		"report_type": os.environ.get("REPORT_TYPE").lower(),
 		"deliver": bool(os.environ.get("DELIVER")),
-		"recipient_override": os.environ.get("RECIPIENT_OVERRIDE").lower(),
-		"athena_query_output_bucket": os.environ.get("ATHENA_QUERY_OUTPUT_BUCKET"),
-		"athena_query_output_bucket_name": os.environ.get("ATHENA_QUERY_OUTPUT_BUCKET_ARN")
+		"recipient_override": os.environ.get("RECIPIENT_OVERRIDE").lower()
 	}
 
 	report_type = globals()[event_bridge_payload['report_type']](event_bridge_payload)
