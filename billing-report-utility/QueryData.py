@@ -7,6 +7,8 @@ import boto3
 from botocore.exceptions import ClientError
 from retrying import retry
 
+from helpers import get_sts_credentials
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -19,54 +21,41 @@ class QueryData:
 
 	def __init__(self, query_parameters):
 		self.query_parameters = query_parameters
-		self.aws_default_region = os.environ['AWS_DEFAULT_REGION']
+		self.sts_endpoint = "https://sts.ca-central-1.amazonaws.com"
 		self.athena_query_role_to_assume = os.environ.get("ATHENA_QUERY_ROLE_TO_ASSUME_ARN")
-		self.athena_query_output_bucket_name = os.environ.get("ATHENA_QUERY_OUTPUT_BUCKET_ARN")
+		self.athena_query_output_bucket_name = os.environ.get("ATHENA_QUERY_OUTPUT_BUCKET")
 		self.athena_query_database = os.environ.get("ATHENA_QUERY_DATABASE")
 
-		self.s3_output = "s3://" + self.athena_query_output_bucket_name
+		self.s3_output = "s3://" + self.athena_query_output_bucket_name + "/cur/"
 
-	def __get_sts_credentials(self):
-		# Assume cross account role needed to perform Athena Queries
-		logger.info("Starting STS Client Connection")
-		sts_client = boto3.client(
-			'sts',
-			region_name=self.aws_default_region,
-			endpoint_url="https://sts.ca-central-1.amazonaws.com"
+		if os.environ['AWS_DEFAULT_REGION']:
+			self.aws_default_region = os.environ['AWS_DEFAULT_REGION']
+		else:
+			self.aws_default_region = "ca-central-1"
+
+		self.role_session_name = "AthenaQuery"
+
+		self.credentials = get_sts_credentials(
+			self.athena_query_role_to_assume, self.aws_default_region,
+			self.sts_endpoint, self.role_session_name
 		)
-		logger.info("STS Client Connection Complete")
 
-		try:
-			assumed_role_object = sts_client.assume_role(
-				DurationSeconds=3600,
-				RoleArn=self.athena_query_role_to_assume,
-				RoleSessionName="AthenaCost"
-			)
-		except ClientError as err:
-			if err.response["Error"]:
-				logger.info("STS Assume Role Error: ", err)
-				logger.error("STS Assume Role Error: ", err)
-			return err
-
-		# From the response that contains the assumed role, get the temporary
-		# credentials that can be used to make subsequent API calls
-		return assumed_role_object['Credentials']
+		logger.info(f"\nQueryData Locals: {locals()}\n")
 
 	@retry(stop_max_attempt_number=10, wait_exponential_multiplier=300, wait_exponential_max=1 * 60 * 1000)
 	def __poll_status(self, _id):
-		credentials = self.__get_sts_credentials()
 
 		# Use the temporary credentials that AssumeRole returns to make a connection
 		# to Amazon Athena
 		try:
 			athena = boto3.client(
 				'athena',
-				aws_access_key_id=credentials['AccessKeyId'],
-				aws_secret_access_key=credentials['SecretAccessKey'],
-				aws_session_token=credentials['SessionToken'],
+				aws_access_key_id=self.credentials['AccessKeyId'],
+				aws_secret_access_key=self.credentials['SecretAccessKey'],
+				aws_session_token=self.credentials['SessionToken'],
 			)
 		except ClientError as err:
-			logger.error("S3 Client Connection Error: ", err)
+			logger.error(f"A boto3 client error has occurred: {err}")
 			return err
 
 		result = athena.get_query_execution(QueryExecutionId=_id)
@@ -80,19 +69,18 @@ class QueryData:
 			raise Exception
 
 	def __run_query(self, query):
-		credentials = self.__get_sts_credentials()
 
 		# Use the temporary credentials that AssumeRole returns to make a connection
 		# to Amazon Athena
 		try:
 			athena = boto3.client(
 				'athena',
-				aws_access_key_id=credentials['AccessKeyId'],
-				aws_secret_access_key=credentials['SecretAccessKey'],
-				aws_session_token=credentials['SessionToken'],
+				aws_access_key_id=self.credentials['AccessKeyId'],
+				aws_secret_access_key=self.credentials['SecretAccessKey'],
+				aws_session_token=self.credentials['SessionToken'],
 			)
 		except ClientError as err:
-			logger.error("S3 Client Connection Error: ", err)
+			logger.error(f"A boto3 client error has occurred: {err}")
 			return err
 
 		response = athena.start_query_execution(

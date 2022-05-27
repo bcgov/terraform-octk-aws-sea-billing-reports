@@ -1,7 +1,10 @@
 import logging
+import os
 import sys
 import re
+
 import boto3
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -9,6 +12,33 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 handler = logging.StreamHandler(sys.stdout)
 handler.setFormatter(formatter)
 logger.addHandler(handler)
+
+
+def get_sts_credentials(role_to_assume, aws_region, sts_endpoint, role_session_name):
+
+    # Assume cross account role needed to perform org level  account queries
+    logger.info("Starting STS Client Connection")
+    sts_client = boto3.client(
+        'sts',
+        region_name=aws_region,
+        endpoint_url=sts_endpoint
+    )
+    logger.info("STS Client Connection Complete")
+
+    try:
+        assumed_role_object = sts_client.assume_role(
+            DurationSeconds=3600,
+            RoleArn=role_to_assume,
+            RoleSessionName=role_session_name
+        )
+    except ClientError as err:
+        if err.response["Error"]:
+            logger.error("STS Assume Role Error: ", err)
+        return err
+
+    # From the response that contains the assumed role, get the temporary
+    # credentials that can be used to make subsequent API calls
+    return assumed_role_object['Credentials']
 
 
 def get_account_name_element(account_details, element_index):
@@ -21,7 +51,31 @@ def get_account_name_element(account_details, element_index):
 
 
 def query_org_accounts():
-    org_client = boto3.client('organizations')
+    query_org_account_role_to_assume = os.environ["QUERY_ORG_ACCOUNTS_ROLE_TO_ASSUME_ARN"]
+    sts_endpoint = "https://sts.ca-central-1.amazonaws.com"
+    role_session_name = "QueryOrgAccounts"
+
+    if os.environ['AWS_DEFAULT_REGION']:
+        aws_default_region = os.environ['AWS_DEFAULT_REGION']
+    else:
+        aws_default_region = "ca-central-1"
+
+    credentials = get_sts_credentials(
+        query_org_account_role_to_assume, aws_default_region,
+        sts_endpoint, role_session_name
+    )
+
+    try:
+        org_client = boto3.client(
+            'organizations',
+            aws_access_key_id=credentials['AccessKeyId'],
+            aws_secret_access_key=credentials['SecretAccessKey'],
+            aws_session_token=credentials['SessionToken'],
+        )
+    except ClientError as err:
+        logger.error(f"A boto3 client error has occurred: {err}")
+        return err
+
 
     # we have lots of accounts - use a Paginator
     paginator = org_client.get_paginator('list_accounts')

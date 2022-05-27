@@ -8,7 +8,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
 from QueryData import QueryData
-import summarize_charges
+# import summarize_charges
 from email_delivery import EmailDelivery
 from helpers import query_org_accounts
 
@@ -27,15 +27,18 @@ class BillingManager:
 
 	def __init__(self, query_parameters):
 		self.query_parameters = query_parameters
-		self.aws_default_region = os.environ['AWS_DEFAULT_REGION']
 		self.athena_query_role_to_assume = os.environ.get("ATHENA_QUERY_ROLE_TO_ASSUME_ARN")
 		self.athena_query_output_bucket = os.environ.get("ATHENA_QUERY_OUTPUT_BUCKET")
-		self.athena_query_output_bucket_name = os.environ.get("ATHENA_QUERY_OUTPUT_BUCKET_ARN")
+		self.athena_query_output_bucket_name = os.environ.get("ATHENA_QUERY_OUTPUT_BUCKET")
 		self.athena_query_database = os.environ.get("ATHENA_QUERY_DATABASE")
 		self.container_creds_uri = os.environ.get("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI")
 
-		self.s3_output = "s3://" + self.athena_query_output_bucket_name
+		if os.environ['AWS_DEFAULT_REGION']:
+			self.aws_default_region = os.environ['AWS_DEFAULT_REGION']
+		else:
+			self.aws_default_region = "ca-central-1"
 
+		self.s3_output = "s3://" + self.athena_query_output_bucket_name
 		self.delivery_outbox = defaultdict(set)
 
 		# make sure the local output directory exists, creating if necessary
@@ -75,7 +78,7 @@ class BillingManager:
 	def format_account_info_for_email(self, billing_group):
 		formatted_account_info = ""
 		project_set_lookup = self.create_project_set_lookup()
-		for project_set in project_set_lookup :
+		for project_set in project_set_lookup:
 			if project_set_lookup[project_set][0]["billing_group"] == billing_group:
 				formatted_account_info += "\n" + self.format_project_set_info(project_set_lookup[project_set])
 		return formatted_account_info
