@@ -22,9 +22,10 @@ class QueryData:
 	def __init__(self, query_parameters):
 		self.query_parameters = query_parameters
 		self.sts_endpoint = "https://sts.ca-central-1.amazonaws.com"
-		self.athena_query_role_to_assume = os.environ.get("ATHENA_QUERY_ROLE_TO_ASSUME_ARN")
-		self.athena_query_output_bucket_name = os.environ.get("ATHENA_QUERY_OUTPUT_BUCKET")
-		self.athena_query_database = os.environ.get("ATHENA_QUERY_DATABASE")
+		self.athena_query_role_to_assume = os.environ["ATHENA_QUERY_ROLE_TO_ASSUME_ARN"]
+		self.athena_query_output_bucket_name = os.environ["ATHENA_QUERY_OUTPUT_BUCKET"]
+		self.athena_query_database = os.environ["ATHENA_QUERY_DATABASE"]
+		self.cmk_sse_kms_alias = os.environ["CMK_SSE_KMS_ALIAS"]
 
 		self.s3_output = "s3://" + self.athena_query_output_bucket_name + "/cur/"
 
@@ -90,6 +91,10 @@ class QueryData:
 			},
 			ResultConfiguration={
 				'OutputLocation': self.s3_output,
+				'EncryptionConfiguration': {
+					'EncryptionOption': 'SSE_KMS',
+					'KmsKey': self.cmk_sse_kms_alias
+				}
 			})
 
 		query_execution_id = response['QueryExecutionId']

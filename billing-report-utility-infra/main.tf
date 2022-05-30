@@ -44,11 +44,92 @@ locals {
   app_name = "octk-aws-sea-billing-reports"
 }
 
+resource "aws_kms_key" "octk_aws_sea_billing_reports_kms_key" {
+  description             = "CMK key for resources related to ${local.app_name}"
+  deletion_window_in_days = 30
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid : "Enable IAM User Permissions",
+        Effect : "Allow",
+        Principal : {
+          AWS : data.aws_caller_identity.current.account_id
+        },
+        Action : "kms:*",
+        Resource : "*"
+      },
+      {
+        Sid : "EnableLZMasterAccountAccess",
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ],
+        Resource = "*",
+        Effect   = "Allow",
+        Principal = {
+          AWS = [
+            "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Athena-Cost-and-Usage-Report",
+          ]
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_kms_alias" "octk_aws_sea_billing_reports_kms_alias" {
+  name = "alias/${local.app_name}"
+  target_key_id = aws_kms_key.octk_aws_sea_billing_reports_kms_key.key_id
+}
+
 resource "aws_s3_bucket" "athena_query_output_bucket" {
   bucket        = "bcgov-ecf-billing-reports-output-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}"
   acl           = "private"
   force_destroy = false
+
+  server_side_encryption_configuration {
+    rule {
+      apply_server_side_encryption_by_default {
+        kms_master_key_id = aws_kms_key.octk_aws_sea_billing_reports_kms_key.arn
+        sse_algorithm     = "aws:kms"
+      }
+    }
+  }
 }
+
+# Allow LZ master cross account access to Athena Query Output bucket
+resource "aws_s3_bucket_policy" "athena_query_output_bucket_policy" {
+  bucket = aws_s3_bucket.athena_query_output_bucket.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid = "AthenaQueryOutputBucketPolicy"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:PutObjectAcl"
+        ],
+        Resource = [
+          aws_s3_bucket.athena_query_output_bucket.arn,
+          "${aws_s3_bucket.athena_query_output_bucket.arn}/cur/*"
+        ]
+        Effect = "Allow",
+        Principal = {
+          AWS = [
+            "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Athena-Cost-and-Usage-Report",
+          ]
+        }
+      }
+    ]
+  })
+}
+
 
 resource "aws_ecr_repository" "billing_reports_ecr" {
   name                 = "${local.app_name}-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}"
@@ -160,10 +241,16 @@ resource "aws_iam_policy" "ecs_task_access_policies" {
         Resource = ["arn:aws:logs:*:*:*"] // TODO: Too relaxed. Need to revise for LZ deployment
       },
       {
-        "Sid" : "PermissionsToAssumeAthenaCostRoleOnMasterAccount",
+        "Sid" : "AssumeAthenaCostRoleOnMasterAccount",
         "Effect" : "Allow",
         "Action" : "sts:AssumeRole",
         "Resource" : "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Athena-Cost-and-Usage-Report"
+      },
+      {
+        "Sid" : "AssumeQueryOrgAccountsRoleOnMasterAccount",
+        "Effect" : "Allow",
+        "Action" : "sts:AssumeRole",
+        "Resource" : "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Query-Org-Accounts"
       }
     ]
   })
@@ -408,12 +495,20 @@ resource "aws_cloudwatch_event_target" "billing_reports_fiver_target" {
           "value" = aws_s3_bucket.athena_query_output_bucket.arn
         },
         {
-          "name" = "ATHENA_QUERY_ROLE_TO_ASSUME_ARN",
+          "name"  = "ATHENA_QUERY_ROLE_TO_ASSUME_ARN",
           "value" = "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Athena-Cost-and-Usage-Report",
         },
         {
-          "name" = "ATHENA_QUERY_DATABASE",
+          "name"  = "QUERY_ORG_ACCOUNTS_ROLE_TO_ASSUME_ARN",
+          "value" = "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Query-Org-Accounts"
+        },
+        {
+          "name"  = "ATHENA_QUERY_DATABASE",
           "value" = "athenacurcfn_cost_and_usage_report",
+        },
+        {
+          "name" = "CMK_SSE_KMS_ALIAS"
+          "value" = aws_kms_alias.octk_aws_sea_billing_reports_kms_alias.arn
         }
       ],
     }]
@@ -439,7 +534,7 @@ resource "aws_cloudwatch_event_rule" "billing_reports_weekly_rule" {
   name                = "${local.app_name}-weekly-rule"
   description         = "Execute the ${local.app_name} every Friday at noon" // Note: 1900 UTC is 1200 PST
   schedule_expression = "cron(35 00 * * ? *)"
-#  schedule_expression = "cron(0 19 ? * FRI *)"
+  #  schedule_expression = "cron(0 19 ? * FRI *)"
 }
 
 resource "aws_cloudwatch_event_target" "billing_reports_weekly_target" {
@@ -473,8 +568,20 @@ resource "aws_cloudwatch_event_target" "billing_reports_weekly_target" {
           "value" = aws_s3_bucket.athena_query_output_bucket.arn
         },
         {
-          "name" = "ATHENA_QUERY_ROLE_TO_ASSUME_ARN",
+          "name"  = "ATHENA_QUERY_ROLE_TO_ASSUME_ARN",
           "value" = "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Athena-Cost-and-Usage-Report",
+        },
+        {
+          "name"  = "QUERY_ORG_ACCOUNTS_ROLE_TO_ASSUME_ARN",
+          "value" = "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Query-Org-Accounts"
+        },
+        {
+          "name"  = "ATHENA_QUERY_DATABASE",
+          "value" = "athenacurcfn_cost_and_usage_report",
+        },
+        {
+          "name" = "CMK_SSE_KMS_ALIAS"
+          "value" = aws_kms_alias.octk_aws_sea_billing_reports_kms_alias.arn
         }
       ],
     }]
@@ -500,7 +607,7 @@ resource "aws_cloudwatch_event_rule" "billing_reports_monthly_rule" {
   name                = "${local.app_name}-monthly-rule"
   description         = "Execute the ${local.app_name} at noon on the last day every month" // Note: 1900 UTC is 1200 PST
   schedule_expression = "cron(37 00 * * ? *)"
-#  schedule_expression = "cron(0 19 L * ? *)"
+  #  schedule_expression = "cron(0 19 L * ? *)"
 }
 
 resource "aws_cloudwatch_event_target" "billing_reports_monthly_target" {
@@ -534,8 +641,20 @@ resource "aws_cloudwatch_event_target" "billing_reports_monthly_target" {
           "value" = aws_s3_bucket.athena_query_output_bucket.arn
         },
         {
-          "name" = "ATHENA_QUERY_ROLE_TO_ASSUME_ARN",
+          "name"  = "ATHENA_QUERY_ROLE_TO_ASSUME_ARN",
           "value" = "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Athena-Cost-and-Usage-Report",
+        },
+        {
+          "name"  = "QUERY_ORG_ACCOUNTS_ROLE_TO_ASSUME_ARN",
+          "value" = "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Query-Org-Accounts"
+        },
+        {
+          "name"  = "ATHENA_QUERY_DATABASE",
+          "value" = "athenacurcfn_cost_and_usage_report",
+        },
+        {
+          "name" = "CMK_SSE_KMS_ALIAS"
+          "value" = aws_kms_alias.octk_aws_sea_billing_reports_kms_alias.arn
         }
       ],
     }]
@@ -561,7 +680,7 @@ resource "aws_cloudwatch_event_rule" "billing_reports_quarterly_rule" {
   name                = "${local.app_name}-quarterly-rule"
   description         = "Execute the ${local.app_name} quarterly" // Note: 1900 UTC is 1200 PST
   schedule_expression = "cron(40 00 * * ? *)"
-#  schedule_expression = "cron(0 19 L * ? *)"
+  #  schedule_expression = "cron(0 19 L * ? *)"
 }
 
 resource "aws_cloudwatch_event_target" "billing_reports_quarterly_target" {
@@ -595,8 +714,20 @@ resource "aws_cloudwatch_event_target" "billing_reports_quarterly_target" {
           "value" = aws_s3_bucket.athena_query_output_bucket.arn
         },
         {
-          "name" = "ATHENA_QUERY_ROLE_TO_ASSUME_ARN",
+          "name"  = "ATHENA_QUERY_ROLE_TO_ASSUME_ARN",
           "value" = "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Athena-Cost-and-Usage-Report",
+        },
+        {
+          "name"  = "QUERY_ORG_ACCOUNTS_ROLE_TO_ASSUME_ARN",
+          "value" = "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Query-Org-Accounts"
+        },
+        {
+          "name"  = "ATHENA_QUERY_DATABASE",
+          "value" = "athenacurcfn_cost_and_usage_report",
+        },
+        {
+          "name" = "CMK_SSE_KMS_ALIAS"
+          "value" = aws_kms_alias.octk_aws_sea_billing_reports_kms_alias.arn
         }
       ],
     }]
