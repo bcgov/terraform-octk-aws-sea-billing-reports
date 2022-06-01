@@ -17,13 +17,12 @@ logger.addHandler(handler)
 def get_sts_credentials(role_to_assume, aws_region, sts_endpoint, role_session_name):
 
     # Assume cross account role needed to perform org level  account queries
-    logger.info("Starting STS Client Connection")
+    logger.info(f"Assuming role: {role_to_assume}")
     sts_client = boto3.client(
         'sts',
         region_name=aws_region,
         endpoint_url=sts_endpoint
     )
-    logger.info("STS Client Connection Complete")
 
     try:
         assumed_role_object = sts_client.assume_role(
@@ -35,6 +34,8 @@ def get_sts_credentials(role_to_assume, aws_region, sts_endpoint, role_session_n
         if err.response["Error"]:
             logger.error("STS Assume Role Error: ", err)
         return err
+
+    logger.info(f"Successfully assumed role: {role_to_assume}")
 
     # From the response that contains the assumed role, get the temporary
     # credentials that can be used to make subsequent API calls

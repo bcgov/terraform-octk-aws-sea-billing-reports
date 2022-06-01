@@ -5,7 +5,7 @@ import logging
 import requests
 
 from datetime import date, datetime, timezone, timedelta, tzinfo
-# from BillingManager import BillingManager
+from BillingManager import BillingManager
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -30,22 +30,14 @@ def weekly(event_bridge_params):
 	event_bridge_params.update({
 		"carbon_copy": None,
 		"billing_groups": None,
-		"start_date": start_date.strftime("%Y, %m, %-d, %-H, %-M, %-S, %f, %Z"),
-		"end_date": end_date.strftime("%Y, %m, %-d, %-H, %-M, %-S, %f, %Z")
+		"start_date": start_date,
+		"end_date": end_date
 	})
 
 	logger.info(f"event_bridge_params_updated: {event_bridge_params}\n")
 
-	# bill_manager = BillingManager(event_bridge_params)
-	# s3_buckets = bill_manager.query_s3_buckets()
-	# logger.info(f"Weekly S3 bucket query: {s3_buckets}")
-
-	# bill_manager = BillingManager(
-	# 	event_bridge_params,
-	# 	delivery_config=None,
-	# 	quarterly_report_config=None
-	# )
-	# bill_manager.do(existing_file=None)
+	bill_manager = BillingManager(event_bridge_params)
+	bill_manager.do()
 
 
 def monthly(event_bridge_params):
@@ -104,34 +96,30 @@ def quarterly(event_bridge_params):
 	event_bridge_params.update({
 		"carbon_copy": None,
 		"billing_groups": None,
-		"start_date": start_date.strftime("%Y, %m, %-d, %-H, %-M, %-S, %f, %Z"),
-		"end_date": end_date.strftime("%Y, %m, %-d, %-H, %-M, %-S, %f, %Z")
+		"start_date": start_date,
+		"end_date": end_date
 	})
 
 	logger.info(f"event_bridge_params_updated: {json.dumps(dict(event_bridge_params))}\n")
 
-	# bill_manager = BillingManager(
-	# 	event_bridge_params,
-	# 	delivery_config=None,
-	# 	quarterly_report_config=None
-	# )
-	# bill_manager.do(existing_file=None)
+	# bill_manager = BillingManager(event_bridge_params)
+	# bill_manager.do()
 
 
 def main():
 	print("Cloud Pathfinder Billing Utility!")
 
-	logger.info(f"Environment Variables: {json.dumps(dict(os.environ))}")
-
-	metadata_uri_v4 = os.environ.get("ECS_CONTAINER_METADATA_URI_V4")
-	get_v4_metadata = requests.get(format(metadata_uri_v4))
-	v4_metadata = get_v4_metadata.json()
-	logger.info(f"V4 Metadata: {json.dumps(v4_metadata)}")
+	# logger.info(f"Environment Variables: {json.dumps(dict(os.environ))}")
+	#
+	# metadata_uri_v4 = os.environ["ECS_CONTAINER_METADATA_URI_V4"]
+	# get_v4_metadata = requests.get(format(metadata_uri_v4))
+	# v4_metadata = get_v4_metadata.json()
+	# logger.info(f"V4 Metadata: {json.dumps(v4_metadata)}")
 
 	event_bridge_payload = {
-		"report_type": os.environ.get("REPORT_TYPE").lower(),
-		"deliver": bool(os.environ.get("DELIVER")),
-		"recipient_override": os.environ.get("RECIPIENT_OVERRIDE").lower()
+		"report_type": os.environ["REPORT_TYPE"].lower(),
+		"deliver": bool(os.environ["DELIVER"]),
+		"recipient_override": os.environ["RECIPIENT_OVERRIDE"].lower()
 	}
 
 	report_type = globals()[event_bridge_payload['report_type']](event_bridge_payload)

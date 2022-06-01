@@ -84,20 +84,25 @@ class QueryData:
 			logger.error(f"A boto3 client error has occurred: {err}")
 			return err
 
-		response = athena.start_query_execution(
-			QueryString=query,
-			QueryExecutionContext={
-				'Database': self.athena_query_database
-			},
-			ResultConfiguration={
-				'OutputLocation': self.s3_output,
-				'EncryptionConfiguration': {
-					'EncryptionOption': 'SSE_KMS',
-					'KmsKey': self.cmk_sse_kms_alias
-				}
-			})
-
-		query_execution_id = response['QueryExecutionId']
+		query_execution_id = []
+		logger.info(f"Query output location: {self.s3_output}")
+		try:
+			response = athena.start_query_execution(
+				QueryString=query,
+				QueryExecutionContext={
+					'Database': self.athena_query_database
+				},
+				ResultConfiguration={
+					'OutputLocation': self.s3_output,
+					'EncryptionConfiguration': {
+						'EncryptionOption': 'SSE_KMS',
+						'KmsKey': self.cmk_sse_kms_alias
+					}
+				})
+			query_execution_id = response['QueryExecutionId']
+		except ClientError as err:
+			logger.error(f"Start query error: {err}")
+			return err
 
 		# block until the query execution completes
 		self.__poll_status(query_execution_id)

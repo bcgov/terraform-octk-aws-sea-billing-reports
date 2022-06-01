@@ -24,6 +24,100 @@ locals {
   app_name = "BCGov"
 }
 
+resource "aws_kms_key" "octk_aws_sea_billing_reports_kms_key" {
+  description             = "CMK key for resources related to ${local.app_name}"
+  deletion_window_in_days = 30
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid : "Enable IAM User Permissions",
+        Effect : "Allow",
+        Principal : {
+          AWS : data.aws_caller_identity.current.account_id
+        },
+        Action : "kms:*",
+        Resource : "*"
+      },
+      {
+        Sid : "AllowUseOfTheKey",
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ],
+        Resource = "*",
+        Effect   = "Allow",
+        Principal = {
+          AWS = [
+            aws_iam_role.athena_cost_and_usage_report.arn
+          ]
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_kms_alias" "octk_aws_sea_billing_reports_kms_alias" {
+  name          = "alias/${local.app_name}-BillingReports"
+  target_key_id = aws_kms_key.octk_aws_sea_billing_reports_kms_key.key_id
+}
+
+resource "aws_s3_bucket" "athena_query_output_bucket" {
+  bucket        = "bcgov-ecf-billing-reports-output-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}"
+  acl           = "private"
+  force_destroy = false
+
+  server_side_encryption_configuration {
+    rule {
+      apply_server_side_encryption_by_default {
+        kms_master_key_id = aws_kms_key.octk_aws_sea_billing_reports_kms_key.arn
+        sse_algorithm     = "aws:kms"
+      }
+    }
+  }
+}
+
+# Role needed to query account in the org. Resides on the master account
+#
+resource "aws_iam_role" "query_org_accounts" {
+  name = "${local.app_name}-Query-Org-Accounts"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = "sts:AssumeRole",
+        Principal = {
+          Service = [
+            "organizations.amazonaws.com"
+          ]
+        },
+      },
+      {
+        Effect = "Allow",
+        Action = "sts:AssumeRole"
+        Principal = {
+          AWS = [
+            "arn:aws:iam::${var.operator_account_id}:root", // Change to line below after deployment to LZ0 Operations account
+            #            "arn:aws:iam::${var.operator_account_id}:role/octk-aws-sea-billing-reports-TaskRole",
+          ]
+        }
+      }
+    ]
+  })
+}
+
+# Attached AWS managed AWSOrganizationsReadOnlyAccess policy to the Query Org Accounts Role
+resource "aws_iam_role_policy_attachment" "query_org_accounts_access" {
+  role       = aws_iam_role.query_org_accounts.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSOrganizationsReadOnlyAccess"
+}
+
 # Role needed for Glue Crawler
 # Grant Operator account access to assume role via STS
 resource "aws_iam_role" "athena_cost_and_usage_report" {
@@ -82,11 +176,49 @@ resource "aws_iam_policy" "athena_cost_and_usage_report_policies" {
       },
       {
         Action = [
+          "athena:StartQueryExecution",
+          "athena:GetQueryExecution"
+        ],
+        Resource = "*",
+        Effect   = "Allow"
+      },
+      {
+        Action = [
           "s3:GetObject",
           "s3:PutObject"
         ],
         Resource = "arn:aws:s3:::pbmmaccel-master-phase1-cacentral1-${var.master_account_phase1_bucket_suffix}/${data.aws_caller_identity.current.account_id}/cur/Cost-and-Usage-Report/Cost-and-Usage-Report*"
         Effect   = "Allow"
+      },
+      {
+        Sid = "AthenaQueryOutputBucketPolicy"
+        Action = [
+          "s3:GetObject",
+          "s3:ListMultipartUploadParts",
+          "s3:AbortMultipartUpload",
+          "s3:CreateBucket",
+          "s3:PutObject",
+          "s3:PutObjectAcl"
+        ],
+        Resource = [
+          aws_s3_bucket.athena_query_output_bucket.arn,
+          "${aws_s3_bucket.athena_query_output_bucket.arn}/*",
+        ]
+        Effect = "Allow"
+      },
+      {
+        Sid = "AllowTheUseOfCMKonOperationsAccount"
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ],
+        Resource = [
+          aws_kms_alias.octk_aws_sea_billing_reports_kms_alias.arn
+        ]
+        Effect = "Allow"
       }
     ]
   })
