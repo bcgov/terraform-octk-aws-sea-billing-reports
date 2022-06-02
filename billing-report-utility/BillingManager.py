@@ -1,16 +1,17 @@
 import logging
 import os
 import sys
+
 import boto3
+from botocore.exceptions import ClientError
 
 from collections import defaultdict
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
+import summarize_charges
 from QueryData import QueryData
-# import summarize_charges
-from email_delivery import EmailDelivery
-from helpers import query_org_accounts
+from helpers import query_org_accounts, get_sts_credentials, send_email
 
 jinja_env = Environment(loader=FileSystemLoader('.'))
 jinja_template = jinja_env.get_template("./templates/email_body.jinja2")
@@ -27,11 +28,14 @@ class BillingManager:
 
 	def __init__(self, query_parameters):
 		self.query_parameters = query_parameters
-		self.athena_query_role_to_assume = os.environ.get("ATHENA_QUERY_ROLE_TO_ASSUME_ARN")
-		self.athena_query_output_bucket = os.environ.get("ATHENA_QUERY_OUTPUT_BUCKET")
-		self.athena_query_output_bucket_name = os.environ.get("ATHENA_QUERY_OUTPUT_BUCKET")
-		self.athena_query_database = os.environ.get("ATHENA_QUERY_DATABASE")
+		self.sts_endpoint = "https://sts.ca-central-1.amazonaws.com"
+		self.athena_query_role_to_assume = os.environ["ATHENA_QUERY_ROLE_TO_ASSUME_ARN"]
+		self.athena_query_output_bucket = os.environ["ATHENA_QUERY_OUTPUT_BUCKET"]
+		self.athena_query_output_bucket_name = os.environ["ATHENA_QUERY_OUTPUT_BUCKET"]
+		self.athena_query_database = os.environ["ATHENA_QUERY_DATABASE"]
 		self.container_creds_uri = os.environ.get("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI")
+
+		self.quarterly_report_config = None
 
 		if os.environ['AWS_DEFAULT_REGION']:
 			self.aws_default_region = os.environ['AWS_DEFAULT_REGION']
@@ -39,6 +43,7 @@ class BillingManager:
 			self.aws_default_region = "ca-central-1"
 
 		self.s3_output = "s3://" + self.athena_query_output_bucket_name
+		self.role_session_name = "AthenaQuery"
 		self.delivery_outbox = defaultdict(set)
 
 		# make sure the local output directory exists, creating if necessary
@@ -68,7 +73,7 @@ class BillingManager:
 		return project_set_lookup
 
 	@staticmethod
-	def format_project_set_info (project_set):
+	def format_project_set_info(project_set):
 		formatted_project_set = project_set[0]["Project"] + "\n"
 		for account in project_set:
 			# NOTE: "name" is the same as "license_plate"-"Environment"
@@ -84,8 +89,6 @@ class BillingManager:
 		return formatted_account_info
 
 	def __deliver_reports(self, billing_group_totals):
-
-		emailer = EmailDelivery()
 
 		for billing_group, attachments in self.delivery_outbox.items():
 			billing_group_email = self.emails_for_billing_groups.get(billing_group).pop()
@@ -110,7 +113,7 @@ class BillingManager:
 			if "carbon_copy" in self.query_parameters:
 				logger.debug(f"Email carbon copy will be sent to '{self.query_parameters['carbon_copy']}'.")
 
-			email_result = emailer.send_email(
+			email_result = send_email(
 				sender="info@cloud.gov.bc.ca", recipient=recipient_email,
 				subject=subject, cc=self.query_parameters.get('carbon_copy'),
 				body_text=body_text, attachments=attachments
@@ -131,19 +134,35 @@ class BillingManager:
 		query_data = QueryData(self.query_parameters)
 		return query_data.query_usage_charges()
 
-	def download_query_results(self, query_execution_id, output_file_local_path):
-		s3_resource = boto3.resource('s3')
+	def __download_query_results(self, query_execution_id, output_file_local_path):
+		credentials = get_sts_credentials(
+			self.athena_query_role_to_assume, self.aws_default_region,
+			self.sts_endpoint, self.role_session_name
+		)
+
+		# Use the temporary credentials that AssumeRole returns to make a connection
+		# to S3 in Operations account
+		try:
+			s3_resource = boto3.resource(
+				's3',
+				aws_access_key_id=credentials['AccessKeyId'],
+				aws_secret_access_key=credentials['SecretAccessKey'],
+				aws_session_token=credentials['SessionToken'],
+			)
+		except ClientError as err:
+			logger.error(f"A boto3 client error has occurred: {err}")
+			return err
 
 		logger.info("Downloading query results...")
 
-		output_file_name = f"{query_execution_id}.csv"
+		output_file_name = f"cur/{query_execution_id}.csv"
 		s3_output_file = s3_resource.Object(self.athena_query_output_bucket_name, output_file_name)
 		s3_output_file.download_file(f"{output_file_local_path}")
-		s3_output_file.delete()
+		# s3_output_file.delete()
 
-		metadata_file = f"{query_execution_id}.metadata"
-		s3_output_metadata_file = s3_resource.Object(self.athena_query_output_bucket_name, metadata_file)
-		s3_output_metadata_file.delete()
+		# metadata_file = f"cur/{query_execution_id}.metadata"
+		# s3_output_metadata_file = s3_resource.Object(self.athena_query_output_bucket_name, metadata_file)
+		# s3_output_metadata_file.delete()
 
 		logger.info(f"Downloaded output file to '{output_file_local_path}'")
 
@@ -184,7 +203,7 @@ class BillingManager:
 			Path(output_local_path).mkdir(parents=True, exist_ok=True)
 			query_results_output_file_local_path = f"{output_local_path}/{output_file_name}"
 
-			self.download_query_results(query_execution_id, query_results_output_file_local_path)
+			self.__download_query_results(query_execution_id, query_results_output_file_local_path)
 
 		else:
 			logger.info(f"Skipping query. Processing local file '{query_results_output_file_local_path}'")
