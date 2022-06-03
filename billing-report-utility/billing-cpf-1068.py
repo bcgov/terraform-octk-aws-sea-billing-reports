@@ -5,6 +5,7 @@ import logging
 import requests
 
 from datetime import date, datetime, timezone, timedelta, tzinfo
+from dateutil.relativedelta import *
 from fiscalyear import FiscalMonth, FiscalQuarter, setup_fiscal_calendar
 
 from BillingManager import BillingManager
@@ -19,17 +20,30 @@ logger.addHandler(handler)
 setup_fiscal_calendar(start_month=4)
 
 
+'''
+Fiscal week begins Wednesday at 00:00:00 and ends the following Tuesday night
+at 23:59:59.
+
+EventBridge schedule is set to trigger the weekly report function on Thursday
+of each week. The generated report is meant to be for the previous fiscal week
+e.g.: EventBridge trigger on Thur, Jun 02, 2022 should generate report for the
+period beginning 00:00:00 Wed, May 25, 2022 through 23:59:59 Tue May 31, 2022
+'''
+
+
 def weekly(event_bridge_params):
 	logger.info(f"Called weekly function")
 	logger.info(f"event_bridge_params_original: {event_bridge_params}\n")
 
-	end_date = datetime.combine(
-		(date.today() - timedelta(days=1)), datetime.max.time(), tzinfo=timezone.utc
-	)
+	# Get today's min (00:00:00) and max (23:59:59) time
+	start_date_min = datetime.combine(date.today(), datetime.min.time(), tzinfo=timezone.utc)
+	end_date_max = datetime.combine(date.today(), datetime.max.time(), tzinfo=timezone.utc)
 
-	start_date = datetime.combine(
-		(end_date - timedelta(days=6)), datetime.min.time(), tzinfo=timezone.utc
-	)
+	# Set start_date to start of Wed the previous week
+	start_date = (start_date_min + relativedelta(weekday=WE(-2))).strftime("%Y, %m, %d, %H, %M, %S")
+
+	# Set end_date to end of Tue the current week
+	end_date = (end_date_max + relativedelta(weekday=TU(-1))).strftime("%Y, %m, %d, %H, %M, %S")
 
 	event_bridge_params.update({
 		"carbon_copy": None,
