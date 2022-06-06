@@ -36,14 +36,14 @@ def weekly(event_bridge_params):
 	logger.info(f"event_bridge_params_original: {event_bridge_params}\n")
 
 	# Get today's min (00:00:00) and max (23:59:59) time
-	start_date_min = datetime.combine(date.today(), datetime.min.time(), tzinfo=timezone.utc)
-	end_date_max = datetime.combine(date.today(), datetime.max.time(), tzinfo=timezone.utc)
+	start_date_min = datetime.combine(date.today(), datetime.min.time())
+	end_date_max = datetime.combine(date.today(), datetime.max.time())
 
 	# Set start_date to start of Wed the previous week
-	start_date = (start_date_min + relativedelta(weekday=WE(-2))).strftime("%Y, %m, %d, %H, %M, %S")
+	start_date = start_date_min + relativedelta(weekday=WE(-2))
 
 	# Set end_date to end of Tue the current week
-	end_date = (end_date_max + relativedelta(weekday=TU(-1))).strftime("%Y, %m, %d, %H, %M, %S")
+	end_date = end_date_max + relativedelta(weekday=TU(-1))
 
 	event_bridge_params.update({
 		"carbon_copy": None,
@@ -132,8 +132,8 @@ with an EventBridge target. Executing this function requires credentials from th
 LZ Operations account and the following environment variables:
 
 REPORT_TYPE="Manual"
-START_DATE=<Target start date>
-END_DATE=<Target end data>
+START_DATE=<YYYY, M, D> - Python datetime format: "%Y, %m, %d" - " eg: "2022, 4, 12"
+END_DATE=<YYYY, M, D> - Python datetime format: "%Y, %m, %d" - eg: "2022, 4, 26"
 DELIVER=True|False
 RECIPIENT_OVERRIDE="hello.123@localhost"
 ATHENA_QUERY_ROLE_TO_ASSUME_ARN="arn:aws:iam::<LZ#-ManagementAccountID>:role/BCGov-Athena-Cost-and-Usage-Report"
@@ -149,8 +149,11 @@ def manual(event_bridge_params):
 	logger.info(f"Called manual function")
 	logger.info(f"event_bridge_params: {json.dumps(dict(event_bridge_params))}\n")
 
-	start_date = datetime.strptime(os.environ["START_DATE"], "%Y, %m, %d, %H, %M, %S")
-	end_date = datetime.strptime(os.environ["END_DATE"], "%Y, %m, %d, %H, %M, %S")
+	start_date_env_var = datetime.strptime(os.environ["START_DATE"], "%Y, %m, %d")
+	end_date_env_var = datetime.strptime(os.environ["END_DATE"], "%Y, %m, %d")
+
+	start_date = datetime.combine(start_date_env_var, datetime.min.time())
+	end_date = datetime.combine(end_date_env_var, datetime.max.time())
 
 	event_bridge_params.update({
 		"carbon_copy": None,
@@ -169,10 +172,11 @@ def main():
 
 	logger.info(f"Environment Variables: {json.dumps(dict(os.environ))}")
 
-	metadata_uri_v4 = os.environ["ECS_CONTAINER_METADATA_URI_V4"]
-	get_v4_metadata = requests.get(format(metadata_uri_v4))
-	v4_metadata = get_v4_metadata.json()
-	logger.info(f"V4 Metadata: {json.dumps(v4_metadata)}")
+	if os.environ.get("AWS_EXECUTION_ENV"):
+		metadata_uri_v4 = os.environ["ECS_CONTAINER_METADATA_URI_V4"]
+		get_v4_metadata = requests.get(format(metadata_uri_v4))
+		v4_metadata = get_v4_metadata.json()
+		logger.info(f"V4 Metadata: {json.dumps(v4_metadata)}")
 
 	event_bridge_payload = {
 		"report_type": os.environ["REPORT_TYPE"].lower(),
