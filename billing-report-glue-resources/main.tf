@@ -68,17 +68,22 @@ resource "aws_kms_alias" "octk_aws_sea_billing_reports_kms_alias" {
 
 resource "aws_s3_bucket" "athena_query_output_bucket" {
   bucket        = "bcgov-ecf-billing-reports-output-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}"
-  acl           = "private"
   force_destroy = false
+}
 
-  server_side_encryption_configuration {
-    rule {
+resource "aws_s3_bucket_acl" "athena_query_output_bucket_acl" {
+  bucket = aws_s3_bucket.athena_query_output_bucket.id
+  acl = "private"
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "athena_query_output_bucket_sse" {
+  bucket = aws_s3_bucket.athena_query_output_bucket.bucket
+      rule {
       apply_server_side_encryption_by_default {
         kms_master_key_id = aws_kms_key.octk_aws_sea_billing_reports_kms_key.arn
         sse_algorithm     = "aws:kms"
       }
     }
-  }
 }
 
 # Role needed to query account in the org. Resides on the master account
@@ -248,6 +253,7 @@ resource "aws_glue_crawler" "aws_cur_crawler_cost_and_usage_report" {
   role          = aws_iam_role.athena_cost_and_usage_report.arn
   database_name = aws_glue_catalog_database.athenacurcfn_cost_and_usage_report_database.name
   description   = "A recurring crawler that keeps your CUR table in Athena up-to-date."
+  schedule = "cron(0 0 1 * ? *)" // Run crawler first day of each month at 00:00:00 UTC
 
   s3_target {
     path = "s3://pbmmaccel-master-phase1-cacentral1-${var.master_account_phase1_bucket_suffix}/${data.aws_caller_identity.current.account_id}/cur/Cost-and-Usage-Report/Cost-and-Usage-Report/"

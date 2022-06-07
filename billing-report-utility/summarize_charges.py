@@ -1,6 +1,5 @@
 import logging
 import os
-from collections import defaultdict
 from datetime import date
 
 import numpy as np

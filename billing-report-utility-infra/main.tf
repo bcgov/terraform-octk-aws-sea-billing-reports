@@ -44,6 +44,10 @@ locals {
   app_name = "octk-aws-sea-billing-reports"
 }
 
+resource "aws_ses_email_identity" "source_email_address" {
+  email = "info@cloud.gov.bc.ca"
+}
+
 resource "aws_kms_key" "octk_aws_sea_billing_reports_kms_key" {
   description             = "CMK key for resources related to ${local.app_name}"
   deletion_window_in_days = 30
@@ -86,51 +90,6 @@ resource "aws_kms_alias" "octk_aws_sea_billing_reports_kms_alias" {
   name          = "alias/${local.app_name}"
   target_key_id = aws_kms_key.octk_aws_sea_billing_reports_kms_key.key_id
 }
-
-#resource "aws_s3_bucket" "athena_query_output_bucket" {
-#  bucket        = "bcgov-ecf-billing-reports-output-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}"
-#  acl           = "private"
-#  force_destroy = false
-#
-#  server_side_encryption_configuration {
-#    rule {
-#      apply_server_side_encryption_by_default {
-#        kms_master_key_id = aws_kms_key.octk_aws_sea_billing_reports_kms_key.arn
-#        sse_algorithm     = "aws:kms"
-#      }
-#    }
-#  }
-#}
-#
-## Allow LZ master cross account access to Athena Query Output bucket
-#resource "aws_s3_bucket_policy" "athena_query_output_bucket_policy" {
-#  bucket = aws_s3_bucket.athena_query_output_bucket.id
-#
-#  policy = jsonencode({
-#    Version = "2012-10-17"
-#    Statement = [
-#      {
-#        Sid = "AthenaQueryOutputBucketPolicy"
-#        Action = [
-#          "s3:GetObject",
-#          "s3:PutObject",
-#          "s3:PutObjectAcl"
-#        ],
-#        Resource = [
-#          "${aws_s3_bucket.athena_query_output_bucket.arn}/*"
-#        ]
-#        Effect = "Allow",
-#        Principal = {
-#          AWS = [
-#            "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Athena-Cost-and-Usage-Report",
-#            "arn:aws:sts::${var.lz_master_account_id}:assumed-role/BCGov-Athena-Cost-and-Usage-Report/TestAthenaQuery",
-#          ]
-#        }
-#      }
-#    ]
-#  })
-#}
-
 
 resource "aws_ecr_repository" "billing_reports_ecr" {
   name                 = "${local.app_name}-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}"
@@ -240,6 +199,15 @@ resource "aws_iam_policy" "ecs_task_access_policies" {
           "logs:DescribeLogStreams"
         ],
         Resource = ["arn:aws:logs:*:*:*"] // TODO: Too relaxed. Need to revise for LZ deployment
+      },
+      {
+        Sid : "SESRelatedPermissions"
+        Effect : "Allow",
+        Action : [
+          "ses:SendEmail",
+          "ses:SendRawEmail"
+        ],
+        Resource : ["arn:aws:ses:ca-central-1:${data.aws_caller_identity.current.account_id}:identity/*"]
       },
       {
         "Sid" : "AssumeAthenaCostRoleOnMasterAccount",
@@ -366,8 +334,8 @@ resource "aws_ecs_task_definition" "billing_reports_ecs_task" {
   family                   = "${local.app_name}-ecs-task"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = "256"
-  memory                   = "512"
+  cpu                      = "2048"
+  memory                   = "8192"
   execution_role_arn       = aws_iam_role.ecs_task_exec_role.arn
   task_role_arn            = aws_iam_role.ecs_task_role.arn
   runtime_platform {
@@ -456,85 +424,11 @@ resource "aws_iam_role_policy_attachment" "ecs_event_bridge_access" {
   policy_arn = aws_iam_policy.ecs_event_bridge_access_policies.arn
 }
 
-
-## Mostly used for testing
-#
-resource "aws_cloudwatch_event_rule" "billing_reports_fiver_rule" {
-  name                = "${local.app_name}-fiver-rule"
-  description         = "Execute the ${local.app_name} every five minutes"
-  schedule_expression = "rate(3 minutes)"
-}
-
-#resource "aws_cloudwatch_event_target" "billing_reports_fiver_target" {
-#  target_id = "${local.app_name}-fiver-targer"
-#  arn       = aws_ecs_cluster.billing_reports_ecs_cluster.arn
-#  role_arn  = aws_iam_role.ecs_event_bridge_role.arn
-#  rule      = aws_cloudwatch_event_rule.billing_reports_fiver_rule.name
-#
-#  input = jsonencode({
-#    containerOverrides = [{
-#      name = "${local.app_name}-ecs-container-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}"
-#      "environment" = [
-#        {
-#          "name"  = "REPORT_TYPE",
-#          "value" = "Weekly"
-#        },
-#        {
-#          "name"  = "DELIVER",
-#          "value" = "False"
-#        },
-#        {
-#          "name"  = "RECIPIENT_OVERRIDE",
-#          "value" = "hello.123h@hello.123.domain"
-#        },
-#        {
-#          "name"  = "ATHENA_QUERY_OUTPUT_BUCKET",
-#          "value" = "bcgov-ecf-billing-reports-output-${var.lz_master_account_id}-ca-central-1"
-#        },
-#        {
-#          "name"  = "ATHENA_QUERY_OUTPUT_BUCKET_ARN",
-#          "value" = "arn:aws:s3:::bcgov-ecf-billing-reports-output-${var.lz_master_account_id}-ca-central-1"
-#        },
-#        {
-#          "name"  = "ATHENA_QUERY_ROLE_TO_ASSUME_ARN",
-#          "value" = "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Athena-Cost-and-Usage-Report",
-#        },
-#        {
-#          "name"  = "QUERY_ORG_ACCOUNTS_ROLE_TO_ASSUME_ARN",
-#          "value" = "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Query-Org-Accounts"
-#        },
-#        {
-#          "name"  = "ATHENA_QUERY_DATABASE",
-#          "value" = "athenacurcfn_cost_and_usage_report",
-#        },
-#        {
-#          "name"  = "CMK_SSE_KMS_ALIAS"
-#          "value" = "arn:aws:kms:ca-central-1:${var.lz_master_account_id}:alias/BCGov-BillingReports"
-#        }
-#      ],
-#    }]
-#  })
-#  ecs_target {
-#    task_count              = 1
-#    task_definition_arn     = aws_ecs_task_definition.billing_reports_ecs_task.arn
-#    launch_type             = "FARGATE"
-#    platform_version        = "LATEST"
-#    enable_execute_command  = false
-#    enable_ecs_managed_tags = false
-#
-#    network_configuration {
-#      security_groups = [aws_security_group.billing_reports_ecs_task_sg.id]
-#      subnets         = [for subnet in data.aws_subnet_ids.current.ids : subnet]
-#      // TODO: Can you make this false and revise to use NAT for access to ECR and CloudWatch???
-#      assign_public_ip = true
-#    }
-#  }
-#}
-
 resource "aws_cloudwatch_event_rule" "billing_reports_weekly_rule" {
   name                = "${local.app_name}-weekly-rule"
   description         = "Execute the ${local.app_name} every Friday at noon" // Note: 1900 UTC is 1200 PST
-  schedule_expression = "cron(0 19 ? * FRI *)"
+  schedule_expression = "cron(0 19 ? * THUR *)"
+  is_enabled          = false
 }
 
 resource "aws_cloudwatch_event_target" "billing_reports_weekly_target" {
@@ -605,8 +499,9 @@ resource "aws_cloudwatch_event_target" "billing_reports_weekly_target" {
 
 resource "aws_cloudwatch_event_rule" "billing_reports_monthly_rule" {
   name                = "${local.app_name}-monthly-rule"
-  description         = "Execute the ${local.app_name} at noon on the last day every month" // Note: 1900 UTC is 1200 PST
-  schedule_expression = "cron(0 19 L * ? *)"
+  description         = "Execute the ${local.app_name} at noon on the first day every month" // Note: 1900 UTC is 1200 PST
+  schedule_expression = "cron(0 19 1 * ? *)"
+  is_enabled          = false
 }
 
 resource "aws_cloudwatch_event_target" "billing_reports_monthly_target" {
@@ -676,9 +571,10 @@ resource "aws_cloudwatch_event_target" "billing_reports_monthly_target" {
 }
 
 resource "aws_cloudwatch_event_rule" "billing_reports_quarterly_rule" {
-  name        = "${local.app_name}-quarterly-rule"
-  description = "Execute the ${local.app_name} quarterly" // Note: 1900 UTC is 1200 PST
+  name                = "${local.app_name}-quarterly-rule"
+  description         = "Execute the ${local.app_name} quarterly" // Note: 1900 UTC is 1200 PST
   schedule_expression = "cron(0 19 1 1/3 ? *)"
+  is_enabled          = false
 }
 
 resource "aws_cloudwatch_event_target" "billing_reports_quarterly_target" {
@@ -745,4 +641,22 @@ resource "aws_cloudwatch_event_target" "billing_reports_quarterly_target" {
       assign_public_ip = true
     }
   }
+}
+
+resource "aws_ssm_parameter" "manual_run_environment_variables" {
+  name = "/bcgov/billingutility/manual_run/env_vars"
+  type = "SecureString"
+  value = jsonencode({
+    "export REPORT_TYPE" : "Manual",
+    "export START_DATE" : "",
+    "export END_DATE" : "",
+    "export DELIVER" : "False",
+    "export RECIPIENT_OVERRIDE" : "",
+    "export ATHENA_QUERY_ROLE_TO_ASSUME_ARN" : "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Athena-Cost-and-Usage-Report",
+    "export ATHENA_QUERY_DATABASE" : "athenacurcfn_cost_and_usage_report"
+    "export QUERY_ORG_ACCOUNTS_ROLE_TO_ASSUME_ARN" : "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Query-Org-Accounts",
+    "export ATHENA_QUERY_OUTPUT_BUCKET" : "bcgov-ecf-billing-reports-output-${var.lz_master_account_id}-ca-central-1",
+    "export ATHENA_QUERY_OUTPUT_BUCKET_ARN" : "arn:aws:s3:::bcgov-ecf-billing-reports-output-${var.lz_master_account_id}-ca-central-1",
+    "export CMK_SSE_KMS_ALIAS" : "arn:aws:kms:ca-central-1:${var.lz_master_account_id}:alias/BCGov-BillingReports"
+  })
 }
