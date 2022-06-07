@@ -5,10 +5,9 @@ variable "aws_region" {
   default = "ca-central-1"
 }
 
-
-variable "lz_master_account_id" {
+# Supplied by env var: TF_VAR_lz_master_account_id
+variable "lz_mgmt_account_id" {
   description = "AWS Account ID for LZ Master account"
 
-  type    = string
-  default = ""
+  type = string
 }

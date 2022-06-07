@@ -77,8 +77,8 @@ resource "aws_kms_key" "octk_aws_sea_billing_reports_kms_key" {
         Effect   = "Allow",
         Principal = {
           AWS = [
-            var.lz_master_account_id,
-            "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Athena-Cost-and-Usage-Report",
+            var.lz_mgmt_account_id,
+            "arn:aws:iam::${var.lz_mgmt_account_id}:role/BCGov-Athena-Cost-and-Usage-Report",
           ]
         }
       }
@@ -213,13 +213,13 @@ resource "aws_iam_policy" "ecs_task_access_policies" {
         "Sid" : "AssumeAthenaCostRoleOnMasterAccount",
         "Effect" : "Allow",
         "Action" : "sts:AssumeRole",
-        "Resource" : "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Athena-Cost-and-Usage-Report"
+        "Resource" : "arn:aws:iam::${var.lz_mgmt_account_id}:role/BCGov-Athena-Cost-and-Usage-Report"
       },
       {
         "Sid" : "AssumeQueryOrgAccountsRoleOnMasterAccount",
         "Effect" : "Allow",
         "Action" : "sts:AssumeRole",
-        "Resource" : "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Query-Org-Accounts"
+        "Resource" : "arn:aws:iam::${var.lz_mgmt_account_id}:role/BCGov-Query-Org-Accounts"
       }
     ]
   })
@@ -455,19 +455,19 @@ resource "aws_cloudwatch_event_target" "billing_reports_weekly_target" {
         },
         {
           "name"  = "ATHENA_QUERY_OUTPUT_BUCKET",
-          "value" = "bcgov-ecf-billing-reports-output-${var.lz_master_account_id}-ca-central-1"
+          "value" = "bcgov-ecf-billing-reports-output-${var.lz_mgmt_account_id}-ca-central-1"
         },
         {
           "name"  = "ATHENA_QUERY_OUTPUT_BUCKET_ARN",
-          "value" = "arn:aws:s3:::bcgov-ecf-billing-reports-output-${var.lz_master_account_id}-ca-central-1"
+          "value" = "arn:aws:s3:::bcgov-ecf-billing-reports-output-${var.lz_mgmt_account_id}-ca-central-1"
         },
         {
           "name"  = "ATHENA_QUERY_ROLE_TO_ASSUME_ARN",
-          "value" = "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Athena-Cost-and-Usage-Report",
+          "value" = "arn:aws:iam::${var.lz_mgmt_account_id}:role/BCGov-Athena-Cost-and-Usage-Report",
         },
         {
           "name"  = "QUERY_ORG_ACCOUNTS_ROLE_TO_ASSUME_ARN",
-          "value" = "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Query-Org-Accounts"
+          "value" = "arn:aws:iam::${var.lz_mgmt_account_id}:role/BCGov-Query-Org-Accounts"
         },
         {
           "name"  = "ATHENA_QUERY_DATABASE",
@@ -475,7 +475,7 @@ resource "aws_cloudwatch_event_target" "billing_reports_weekly_target" {
         },
         {
           "name"  = "CMK_SSE_KMS_ALIAS"
-          "value" = "arn:aws:kms:ca-central-1:${var.lz_master_account_id}:alias/BCGov-BillingReports"
+          "value" = "arn:aws:kms:ca-central-1:${var.lz_mgmt_account_id}:alias/BCGov-BillingReports"
         }
       ],
     }]
@@ -528,19 +528,19 @@ resource "aws_cloudwatch_event_target" "billing_reports_monthly_target" {
         },
         {
           "name"  = "ATHENA_QUERY_OUTPUT_BUCKET",
-          "value" = "bcgov-ecf-billing-reports-output-${var.lz_master_account_id}-ca-central-1"
+          "value" = "bcgov-ecf-billing-reports-output-${var.lz_mgmt_account_id}-ca-central-1"
         },
         {
           "name"  = "ATHENA_QUERY_OUTPUT_BUCKET_ARN",
-          "value" = "arn:aws:s3:::bcgov-ecf-billing-reports-output-${var.lz_master_account_id}-ca-central-1"
+          "value" = "arn:aws:s3:::bcgov-ecf-billing-reports-output-${var.lz_mgmt_account_id}-ca-central-1"
         },
         {
           "name"  = "ATHENA_QUERY_ROLE_TO_ASSUME_ARN",
-          "value" = "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Athena-Cost-and-Usage-Report",
+          "value" = "arn:aws:iam::${var.lz_mgmt_account_id}:role/BCGov-Athena-Cost-and-Usage-Report",
         },
         {
           "name"  = "QUERY_ORG_ACCOUNTS_ROLE_TO_ASSUME_ARN",
-          "value" = "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Query-Org-Accounts"
+          "value" = "arn:aws:iam::${var.lz_mgmt_account_id}:role/BCGov-Query-Org-Accounts"
         },
         {
           "name"  = "ATHENA_QUERY_DATABASE",
@@ -548,7 +548,7 @@ resource "aws_cloudwatch_event_target" "billing_reports_monthly_target" {
         },
         {
           "name"  = "CMK_SSE_KMS_ALIAS"
-          "value" = "arn:aws:kms:ca-central-1:${var.lz_master_account_id}:alias/BCGov-BillingReports"
+          "value" = "arn:aws:kms:ca-central-1:${var.lz_mgmt_account_id}:alias/BCGov-BillingReports"
         }
       ],
     }]
@@ -601,19 +601,19 @@ resource "aws_cloudwatch_event_target" "billing_reports_quarterly_target" {
         },
         {
           "name"  = "ATHENA_QUERY_OUTPUT_BUCKET",
-          "value" = "bcgov-ecf-billing-reports-output-${var.lz_master_account_id}-ca-central-1"
+          "value" = "bcgov-ecf-billing-reports-output-${var.lz_mgmt_account_id}-ca-central-1"
         },
         {
           "name"  = "ATHENA_QUERY_OUTPUT_BUCKET_ARN",
-          "value" = "arn:aws:s3:::bcgov-ecf-billing-reports-output-${var.lz_master_account_id}-ca-central-1"
+          "value" = "arn:aws:s3:::bcgov-ecf-billing-reports-output-${var.lz_mgmt_account_id}-ca-central-1"
         },
         {
           "name"  = "ATHENA_QUERY_ROLE_TO_ASSUME_ARN",
-          "value" = "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Athena-Cost-and-Usage-Report",
+          "value" = "arn:aws:iam::${var.lz_mgmt_account_id}:role/BCGov-Athena-Cost-and-Usage-Report",
         },
         {
           "name"  = "QUERY_ORG_ACCOUNTS_ROLE_TO_ASSUME_ARN",
-          "value" = "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Query-Org-Accounts"
+          "value" = "arn:aws:iam::${var.lz_mgmt_account_id}:role/BCGov-Query-Org-Accounts"
         },
         {
           "name"  = "ATHENA_QUERY_DATABASE",
@@ -621,7 +621,7 @@ resource "aws_cloudwatch_event_target" "billing_reports_quarterly_target" {
         },
         {
           "name"  = "CMK_SSE_KMS_ALIAS"
-          "value" = "arn:aws:kms:ca-central-1:${var.lz_master_account_id}:alias/BCGov-BillingReports"
+          "value" = "arn:aws:kms:ca-central-1:${var.lz_mgmt_account_id}:alias/BCGov-BillingReports"
         }
       ],
     }]
@@ -652,11 +652,11 @@ resource "aws_ssm_parameter" "manual_run_environment_variables" {
     "export END_DATE" : "",
     "export DELIVER" : "False",
     "export RECIPIENT_OVERRIDE" : "",
-    "export ATHENA_QUERY_ROLE_TO_ASSUME_ARN" : "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Athena-Cost-and-Usage-Report",
+    "export ATHENA_QUERY_ROLE_TO_ASSUME_ARN" : "arn:aws:iam::${var.lz_mgmt_account_id}:role/BCGov-Athena-Cost-and-Usage-Report",
     "export ATHENA_QUERY_DATABASE" : "athenacurcfn_cost_and_usage_report"
-    "export QUERY_ORG_ACCOUNTS_ROLE_TO_ASSUME_ARN" : "arn:aws:iam::${var.lz_master_account_id}:role/BCGov-Query-Org-Accounts",
-    "export ATHENA_QUERY_OUTPUT_BUCKET" : "bcgov-ecf-billing-reports-output-${var.lz_master_account_id}-ca-central-1",
-    "export ATHENA_QUERY_OUTPUT_BUCKET_ARN" : "arn:aws:s3:::bcgov-ecf-billing-reports-output-${var.lz_master_account_id}-ca-central-1",
-    "export CMK_SSE_KMS_ALIAS" : "arn:aws:kms:ca-central-1:${var.lz_master_account_id}:alias/BCGov-BillingReports"
+    "export QUERY_ORG_ACCOUNTS_ROLE_TO_ASSUME_ARN" : "arn:aws:iam::${var.lz_mgmt_account_id}:role/BCGov-Query-Org-Accounts",
+    "export ATHENA_QUERY_OUTPUT_BUCKET" : "bcgov-ecf-billing-reports-output-${var.lz_mgmt_account_id}-ca-central-1",
+    "export ATHENA_QUERY_OUTPUT_BUCKET_ARN" : "arn:aws:s3:::bcgov-ecf-billing-reports-output-${var.lz_mgmt_account_id}-ca-central-1",
+    "export CMK_SSE_KMS_ALIAS" : "arn:aws:kms:ca-central-1:${var.lz_mgmt_account_id}:alias/BCGov-BillingReports"
   })
 }
