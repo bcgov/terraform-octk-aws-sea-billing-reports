@@ -48,49 +48,6 @@ resource "aws_ses_email_identity" "source_email_address" {
   email = "info@cloud.gov.bc.ca"
 }
 
-resource "aws_kms_key" "octk_aws_sea_billing_reports_kms_key" {
-  description             = "CMK key for resources related to ${local.app_name}"
-  deletion_window_in_days = 30
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid : "Enable IAM User Permissions",
-        Effect : "Allow",
-        Principal : {
-          AWS : data.aws_caller_identity.current.account_id
-        },
-        Action : "kms:*",
-        Resource : "*"
-      },
-      {
-        Sid : "AllowUseOfTheKey",
-        Action = [
-          "kms:Encrypt",
-          "kms:Decrypt",
-          "kms:ReEncrypt*",
-          "kms:GenerateDataKey*",
-          "kms:DescribeKey"
-        ],
-        Resource = "*",
-        Effect   = "Allow",
-        Principal = {
-          AWS = [
-            var.lz_mgmt_account_id,
-            "arn:aws:iam::${var.lz_mgmt_account_id}:role/BCGov-Athena-Cost-and-Usage-Report",
-          ]
-        }
-      }
-    ]
-  })
-}
-
-resource "aws_kms_alias" "octk_aws_sea_billing_reports_kms_alias" {
-  name          = "alias/${local.app_name}"
-  target_key_id = aws_kms_key.octk_aws_sea_billing_reports_kms_key.key_id
-}
-
 resource "aws_ecr_repository" "billing_reports_ecr" {
   name                 = "${local.app_name}-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}"
   image_tag_mutability = "MUTABLE"

@@ -25,7 +25,7 @@ locals {
 }
 
 resource "aws_kms_key" "octk_aws_sea_billing_reports_kms_key" {
-  description             = "CMK key for resources related to ${local.app_name}"
+  description             = "CMK key for resources related to ${local.app_name} billing report utility"
   deletion_window_in_days = 30
 
   policy = jsonencode({
