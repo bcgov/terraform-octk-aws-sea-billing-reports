@@ -52,8 +52,13 @@ Resources used in the current iteration of this solution are located in three di
 
 
 ### Pending Items
-- [ ] Conversion rate from USD to CAD is provided by [Fixer](https://fixer.io/). We're on the free tier which has no uptime or availability guarantees. The service needs to be revised to something more robust. This is set to be addressed by ticket [1727](https://github.com/bcgov/cloud-pathfinder/issues/1727).
-- [ ] Monitoring and Alerting: email, container
+- Conversion rate from USD to CAD is provided by [Fixer](https://fixer.io/). We're on the free tier which has no uptime or availability guarantees. The service needs to be revised to something more robust. This is set to be addressed by ticket [1727](https://github.com/bcgov/cloud-pathfinder/issues/1727).
+- Monitoring and Alerting: The current iteration does not include monitoring and alerting components. Two key areas that would be beneficial to start with are:
+  - SES related metrics
+    - Bounce and complaint: We need to ensure these rates are low. Bounce rates 5% or greater will result in an account review. Bounce of 10% or greater, can result in AWS pausing the account's ability to send additional emails till the cause of the high bounce rate is addressed. A good reference material on this can be found at: [Amazon SES Sending review process FAQs](https://docs.aws.amazon.com/ses/latest/dg/faqs-enforcement.html)
+    - Send and delivery rates: Would come handy with generating alerts should there be changes in send/delivery patterns (e.g.: emails not sent post quarterly report generation)
+  - ECS performance metrics: Would prove beneficial with identifying potential issues during task execution. We want to ensure we are notified should a task fail (e.g.: out of memory, CPU...etc).
+- Unit testing: This was not in scope for the current refactoring. Would be beneficial to have some unit tests in place. 
 
 
 ### Generating reports for dates not handled by EventBridge
