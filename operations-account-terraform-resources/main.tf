@@ -285,6 +285,11 @@ resource "aws_security_group" "billing_reports_ecs_task_sg" {
 
 resource "aws_ecs_cluster" "billing_reports_ecs_cluster" {
   name = "${local.app_name}-cluster"
+
+  setting {
+    name  = "containerInsights"
+    value = "enabled"
+  }
 }
 
 resource "aws_ecs_task_definition" "billing_reports_ecs_task" {
@@ -302,7 +307,7 @@ resource "aws_ecs_task_definition" "billing_reports_ecs_task" {
   container_definitions = jsonencode([{
     name       = "${local.app_name}-ecs-container-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}"
     image      = "${aws_ecr_repository.billing_reports_ecr.repository_url}:latest"
-    entryPoint = ["python3", "billing-cpf-1068.py"]
+    entryPoint = ["python3", "billing.py"]
     logConfiguration = {
       logDriver = "awslogs",
       options = {

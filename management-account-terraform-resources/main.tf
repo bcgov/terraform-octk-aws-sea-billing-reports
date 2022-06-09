@@ -69,7 +69,7 @@ resource "aws_kms_alias" "octk_aws_sea_billing_reports_kms_alias" {
 resource "aws_s3_bucket" "athena_query_output_bucket" {
   bucket        = "bcgov-ecf-billing-reports-output-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}"
   force_destroy = false
-  acl = "private"
+  acl           = "private"
 
   server_side_encryption_configuration {
     rule {
