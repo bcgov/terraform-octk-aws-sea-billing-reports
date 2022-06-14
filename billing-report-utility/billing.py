@@ -1,470 +1,212 @@
-import argparse
-import calendar
 import json
-import logging
 import os
-import re
-from collections import defaultdict
-from datetime import date, datetime, timezone, timedelta
+import sys
+import logging
 
-import boto3
-from botocore.exceptions import ClientError
-from jinja2 import Environment, FileSystemLoader
+from datetime import date, datetime, timezone, timedelta, tzinfo
+from dateutil.relativedelta import *
 
-import query_data
-import summarize_charges
+import requests
 
-from pathlib import Path
+from fiscalyear import FiscalMonth, FiscalQuarter, setup_fiscal_calendar
 
-from email_delivery import EmailDelivery
+from BillingManager import BillingManager
 
 logger = logging.getLogger(__name__)
-
-
-class BillingManager:
-
-	@staticmethod
-	def display_step(message):
-		print(message)
-
-	@staticmethod
-	def read_input_file(teams_file):
-		with open(teams_file) as f:
-			data = json.load(f)
-
-		return data
-
-	@staticmethod
-	def query_org_accounts():
-		org_client = boto3.client('organizations')
-
-		# we have lots of accounts - use a Paginator
-		paginator = org_client.get_paginator('list_accounts')
-
-		page_iterator = paginator.paginate()
-
-		core_billing_group_tags = {
-			"billing_group": "SEA Core",
-			"admin_contact_email": "julian.subda@gov.bc.ca",
-			"admin_contact_name": "Julian Subda",
-			"Project": "Landing Zone Core",
-			"Environment": "Core"
-		}
-
-		def get_account_name_element(account_deets, element_index):
-			account_email = account_deets['email']
-			account_name = account_deets['name']
-
-			if re.search("app", account_email):
-				return account_name.split("-")[element_index]
-			else:
-				return account_name
-
-		accounts = []
-
-		for page in page_iterator:
-
-			for account in page['Accounts']:
-				tags_response = org_client.list_tags_for_resource(
-					ResourceId=account['Id']
-				)
-
-				transposed_tags = {}
-
-				for tag in tags_response['Tags']:
-					transposed_tag = {
-						tag['Key']: tag['Value']
-					}
-					transposed_tags.update(transposed_tag)
-
-				account_details = {
-					"arn": account['Arn'],
-					"email": account['Email'],
-					"id": account['Id'],
-					"name": account['Name'],
-					"status": account['Status']
-				}
-
-				account_details.update(transposed_tags)
-
-				if not transposed_tags.get('billing_group', None):
-					logger.debug(f"Account '{account_details['id']}' missing metadata tags; applying defaults.")
-					account_details.update(core_billing_group_tags)
-
-				account_details['license_plate'] = get_account_name_element(account_details, 0)
-
-				accounts.append(account_details)
-
-		return accounts
-
-	def create_project_set_lookup(self):
-		project_set_lookup = {}
-		for account in self.org_accounts:
-			# TODO: sorting by license_plate doesn't handle core accounts
-			if ( account["license_plate"] in project_set_lookup):
-				project_set_lookup[account["license_plate"]].append(account)
-			else :
-				project_set_lookup[account["license_plate"]] = [account]
-		return project_set_lookup
-
-	def format_project_set_info (self, project_set) :
-		formatted_project_set = project_set[0]["Project"] + "\n"
-		for account in project_set :
-			# NOTE: "name" is the same as "license_plate"-"Environment"
-			formatted_project_set += "  - " + account["id"] + " - " + account["name"] + "\n"
-		return formatted_project_set
-
-	def format_account_info_for_email(self, billing_group):
-		formatted_account_info = ""
-		project_set_lookup = self.create_project_set_lookup()
-		for project_set in project_set_lookup :
-			if (project_set_lookup[project_set][0]["billing_group"] == billing_group) :
-				formatted_account_info += "\n" + self.format_project_set_info(project_set_lookup[project_set])
-		return formatted_account_info
-
-	def deliver_reports(self, billing_group_totals):
-		if self.delivery_config:
-			# We don't want to accedentally send quarterly reports to clients.
-			if self.quarterly_report_config:
-				recipient_email = self.delivery_config.get("recipient_override") or "cloud.pathfinder@gov.bc.ca"
-				subject = self.delivery_config.get("subject") or f"Cloud Consumption Quarterly Report for {self.quarterly_report_config.get('year')}, Quarter {self.quarterly_report_config.get('quarter')}."
-				body_text=f"Attached is the quarterly report for {self.quarterly_report_config.get('year')}, Quarter {self.quarterly_report_config.get('quarter')}."
-				attachment = self.delivery_outbox.get("QUARTERLY_REPORT")
-
-				email_result = self.emailer.send_email(sender="info@cloud.gov.bc.ca",
-															recipient=recipient_email,
-															subject=subject,
-															cc=self.query_parameters.get('carbon_copy'),
-															body_text=body_text,
-															attachments=attachment)
-
-				logger.debug(f"Email result: {email_result}.")
-
-			# We want to send emails to clients about their account spending.
-			else:
-				for billing_group, attachments in self.delivery_outbox.items():
-					billing_group_email = self.emails_for_billing_groups.get(billing_group).pop()
-					recipient_email = self.delivery_config.get("recipient_override") or billing_group_email
-
-					subject = self.delivery_config.get("subject") or f"Cloud Consumption Report ${billing_group_totals.get(billing_group)} for {self.query_parameters['start_date'].strftime('%d-%m-%Y')} to {self.query_parameters['end_date'].strftime('%d-%m-%Y')}."
-
-
-					body_text = self.template.render({
-						"billing_group_email" : billing_group_email,
-						"start_date" : self.query_parameters.get("start_date"),
-						"end_date" : self.query_parameters.get("end_date"),
-						"billing_group_total" : billing_group_totals.get(billing_group),
-						"list_of_accounts" : self.format_account_info_for_email(billing_group)
-					})
-
-					logger.debug(f"Sending email to '{recipient_email}' with subject '{subject}'")
-
-					if "carbon_copy" in self.query_parameters:
-						logger.debug(f"Email carbon copy will be sent to '{self.query_parameters['carbon_copy']}'.")
-
-					email_result = self.emailer.send_email(sender="info@cloud.gov.bc.ca",
-															recipient=recipient_email,
-															subject=subject,
-															cc=self.query_parameters.get('carbon_copy'),
-															body_text=body_text,
-															attachments=attachments)
-
-					logger.debug(f"Email result: {email_result}.")
-		else:
-			logger.debug("Skipping email delivery.")
-
-	def run_query(self):
-		self.display_step("Querying data...")
-
-		# if we are querying for specific billing group(s), we need to pass in account_ids
-		if self.query_parameters.get('billing_groups'):
-			account_ids = set(map(lambda a: a['id'], self.org_accounts))
-			self.query_parameters['account_ids'] = account_ids
-
-			logger.debug(f"Querying for account_ids '{account_ids}'")
-
-		return query_data.query_usage_charges(self.query_parameters, self.database, self.s3_output)
-
-	def download_query_results(self, query_execution_id, output_file_local_path):
-		self.display_step("Downloading query results...")
-
-		output_file_name = f"{query_execution_id}.csv"
-		s3_output_file = self.s3.Object(self.s3_bucket, output_file_name)
-		s3_output_file.download_file(f"{output_file_local_path}")
-		s3_output_file.delete()
-
-		metadata_file = f"{query_execution_id}.metadata"
-		s3_output_metadata_file = self.s3.Object(self.s3_bucket, metadata_file)
-		s3_output_metadata_file.delete()
-
-		self.display_step(f"Downloaded output file to '{output_file_local_path}'")
-
-	def queue_attachment(self, billing_group, attachment):
-		# we will queue up the attachments generated in the processing step and deliver to recipients after processing
-		self.delivery_outbox[billing_group].add(attachment)
-
-	def summarize(self, query_results_output_file_local_path, summary_output_path):
-		self.display_step("Summarizing query results...")
-
-		summarize_charges.aggregate(query_results_output_file_local_path, summary_output_path, self.org_accounts,
-									self.query_parameters, self.queue_attachment)
-
-		self.display_step(f"Summarized data stored at '{summary_output_path}'")
-
-	def reports(self, query_results_output_file_local_path, report_output_dir):
-		self.display_step("Generating reports...")
-
-		billing_group_totals = summarize_charges.report(query_results_output_file_local_path, report_output_dir, self.org_accounts,
-									self.query_parameters, self.queue_attachment, self.quarterly_report_config)
-
-		return billing_group_totals
-
-	def do(self, existing_file=None):
-
-		query_results_output_file_local_path = existing_file
-
-		if not query_results_output_file_local_path:
-			query_execution_id = self.run_query()
-			logger.debug(f"query_execution_id = '{query_execution_id}'")
-
-			output_file_name = "query_results.csv"
-			output_local_path = f"{self.output_dir}/{query_execution_id}/{self.query_results_dir_name}"
-			Path(output_local_path).mkdir(parents=True, exist_ok=True)
-			query_results_output_file_local_path = f"{output_local_path}/{output_file_name}"
-
-			self.download_query_results(query_execution_id, query_results_output_file_local_path)
-
-		else:
-			self.display_step(f"Skipping query.  Processing local file '{query_results_output_file_local_path}'")
-
-		logger.debug(f"query_results_output_file_local_path = '{query_results_output_file_local_path}'")
-
-		base_output_path = "/".join(query_results_output_file_local_path.split("/")[:-2])
-
-		summary_local_path = f"{base_output_path}/{self.summarized_dir_name}"
-		Path(summary_local_path).mkdir(parents=True, exist_ok=True)
-		self.summarize(query_results_output_file_local_path, summary_local_path)
-
-		reports_local_path = f"{base_output_path}/{self.reports_dir_name}"
-		Path(reports_local_path).mkdir(parents=True, exist_ok=True)
-		billing_group_totals = self.reports(query_results_output_file_local_path, reports_local_path)
-
-		self.deliver_reports(billing_group_totals)
-
-	def __init__(self, query_parameters, athena_database="athenacurcfn_cost_and_usage_report",
-				 query_output_bucket="bcgov-aws-sea-billing-reports", delivery_config=None, quarterly_report_config=None):
-		# The database to which the query belongs
-		self.database = athena_database
-
-		self.init_s3(query_output_bucket)
-
-		self.display_step("Discovering accounts in organization...")
-		self.org_accounts = self.query_org_accounts()
-
-		# filter the accounts based on provided billing_groups parameter, if specified
-		if query_parameters.get("billing_groups"):
-			bgs = query_parameters.get("billing_groups").split(",")
-			logger.debug(f"Processing billing details for Billing Groups '{bgs}'.")
-			self.org_accounts = [a for a in self.org_accounts if a['billing_group'] in bgs]
-			logger.debug(f"{len(self.org_accounts)} accounts in target billing groups...")
-			logger.debug(f"target billing groups: '{self.org_accounts}'")
-
-		self.delivery_config = delivery_config
-		self.delivery_outbox = defaultdict(set)
-
-		self.quarterly_report_config = quarterly_report_config
-
-		env = Environment(loader=FileSystemLoader('.'))
-		self.template = env.get_template("./templates/email_body.jinja2")
-
-		# create a lookup to allow us to easily derive the "owner" email address for a given billing group
-		self.emails_for_billing_groups = defaultdict(set)
-		for account in self.org_accounts:
-			self.emails_for_billing_groups[account['billing_group']].add(account['admin_contact_email'])
-
-		self.emailer = EmailDelivery()
-
-		self.query_parameters = query_parameters
-
-		# make sure the local output directory exists, creating if necessary
-		current_dir = os.path.dirname(os.path.realpath(__file__))
-		self.output_dir = f"{current_dir}/output"
-		Path(self.output_dir).mkdir(parents=True, exist_ok=True)
-
-		self.query_results_dir_name = "query_results"
-		self.summarized_dir_name = "summarized"
-		self.reports_dir_name = "reports"
-
-	def init_s3(self, query_output_bucket):
-		# S3 output Bucket name - where the results of the athena query is stored as a csv file
-		self.s3_bucket = query_output_bucket
-
-		# S3 Bucket to store results
-		self.s3_output = 's3://' + self.s3_bucket
-
-		self.s3 = boto3.resource('s3')
-
-		s3client = boto3.client("s3")
-
-		try:
-			s3client.head_bucket(Bucket=query_output_bucket)
-		except ClientError:
-			# bucket doesn't exist (or we have no access). try to create it below
-			s3client.create_bucket(Bucket=query_output_bucket,
-								   CreateBucketConfiguration={'LocationConstraint': s3client.meta.region_name})
-
-
-def main(params):
-	print("Cloud Pathfinder Billing Utility!")
-
-	deliver = params.get('deliver', False)
-	quarter = params.get('quarter', 0)
-
-	delivery_config = None
-	if deliver:
-		delivery_config = {
-			"deliver": deliver,
-			"recipient_override": params.get("recipient_override")
-		}
-
-	quarterly_report_config = None
-	if (1 <= quarter <= 4) :
-		quarterly_report_config = {
-			"quarter": quarter,
-			"year": params.get('year')
-		}
-
-	bill_manager = BillingManager(params, delivery_config=delivery_config, quarterly_report_config=quarterly_report_config)
-
-	bill_manager.do(existing_file=params['query_results_local_file'])
+logger.setLevel(logging.INFO)
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+handler = logging.StreamHandler(sys.stdout)
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
+setup_fiscal_calendar(start_month=4)
+
+
+def weekly(event_bridge_params):
+    """
+    Fiscal week begins Wednesday at 00:00:00 and ends the following Tuesday night
+    at 23:59:59.
+
+    EventBridge schedule is set to trigger the weekly report function on Thursday
+    of each week. The generated report is meant to be for the previous fiscal week
+    e.g.: EventBridge trigger on Thur, Jun 02, 2022 should generate report for the
+    period beginning 00:00:00 Wed, May 25, 2022 through 23:59:59 Tue May 31, 2022
+    """
+    logger.info(f"Called weekly function")
+    logger.info(f"event_bridge_params_original: {event_bridge_params}\n")
+
+    # Get today's min (00:00:00) and max (23:59:59) time
+    start_date_min = datetime.combine(date.today(), datetime.min.time())
+    end_date_max = datetime.combine(date.today(), datetime.max.time())
+
+    # Set start_date to start of Wed the previous week
+    start_date = start_date_min + relativedelta(weekday=WE(-2))
+
+    # Set end_date to end of Tue the current week
+    end_date = end_date_max + relativedelta(weekday=TU(-1))
+
+    event_bridge_params.update(
+        {
+            "carbon_copy": None,
+            "billing_groups": None,
+            "start_date": start_date,
+            "end_date": end_date,
+        }
+    )
+
+    logger.info(f"event_bridge_params_updated: {event_bridge_params}\n")
+
+    bill_manager = BillingManager(event_bridge_params)
+    bill_manager.do()
+
+
+def monthly(event_bridge_params):
+    """
+    EventBridge schedule is set to trigger the monthly report function on the first
+    day of each month. The generated report is meant to be for the previous month
+    e.g.: EventBridge trigger on Feb 01 should generate report for Jan 01.
+    """
+
+    logger.info(f"Called monthly function")
+    logger.info(f"event_bridge_params: {json.dumps(dict(event_bridge_params))}")
+
+    previous_fiscal_month_start = (
+        FiscalMonth.current().prev_fiscal_month.start.strftime("%Y, %m, %d, %H, %M, %S")
+    )
+    previous_fiscal_month_end = FiscalMonth.current().prev_fiscal_month.end.strftime(
+        "%Y, %m, %d, %H, %M, %S"
+    )
+
+    start_date = datetime.strptime(
+        previous_fiscal_month_start, "%Y, %m, %d, %H, %M, %S"
+    )
+    end_date = datetime.strptime(previous_fiscal_month_end, "%Y, %m, %d, %H, %M, %S")
+
+    event_bridge_params.update(
+        {
+            "carbon_copy": None,
+            "billing_groups": None,
+            "start_date": start_date,
+            "end_date": end_date,
+        }
+    )
+    logger.info(f"event_bridge_params_updated: {event_bridge_params}\n")
+
+    bill_manager = BillingManager(event_bridge_params)
+    bill_manager.do()
+
+
+def quarterly(event_bridge_params):
+    """
+    EventBridge schedule is set to trigger the quarterly report function on the first
+    day of each quarter. The generated report is meant to be for the previous quarter
+    e.g.: EventBridge trigger at start of Q1 2022 should generate report for Q4 2021.
+
+    Fiscal year begins April 01 of the calendar year. As a result, the second quarter
+    of the calendar year is the first quarter of the fiscal year. The mapping between
+    calendar quarter and fiscal quarter is as follows:
+
+    Calendar Q1 <--> Fiscal Q4 <--> Jan - Mar
+    Calendar Q2 <--> Fiscal Q1 <--> Apr - Jun
+    Calendar Q3 <--> Fiscal Q2 <--> Jul - Sep
+    Calendar Q4 <--> Fiscal Q3 <--> Oct - Dec
+    """
+
+    logger.info(f"Called quarterly function")
+    logger.info(f"event_bridge_params: {json.dumps(dict(event_bridge_params))}\n")
+
+    previous_fiscal_quarter_start = (
+        FiscalQuarter.current().prev_fiscal_quarter.start.strftime(
+            "%Y, %m, %d, %H, %M, %S"
+        )
+    )
+    previous_fiscal_quarter_end = (
+        FiscalQuarter.current().prev_fiscal_quarter.end.strftime(
+            "%Y, %m, %d, %H, %M, %S"
+        )
+    )
+
+    start_date = datetime.strptime(
+        previous_fiscal_quarter_start, "%Y, %m, %d, %H, %M, %S"
+    )
+    end_date = datetime.strptime(previous_fiscal_quarter_end, "%Y, %m, %d, %H, %M, %S")
+
+    event_bridge_params.update(
+        {
+            "carbon_copy": None,
+            "billing_groups": None,
+            "start_date": start_date,
+            "end_date": end_date,
+        }
+    )
+    logger.info(f"event_bridge_params_updated: {event_bridge_params}\n")
+
+    bill_manager = BillingManager(event_bridge_params)
+    bill_manager.do()
+
+
+def manual(event_bridge_params):
+    """
+    Used to generate report for a specific date/time period. This function will not be associated
+    with an EventBridge target. Executing this function requires credentials from the corresponding
+    LZ Operations account and the following environment variables:
+
+    REPORT_TYPE="Manual"
+    START_DATE=<YYYY, M, D> - Python datetime format: "%Y, %m, %d" - " eg: "2022, 4, 12"
+    END_DATE=<YYYY, M, D> - Python datetime format: "%Y, %m, %d" - eg: "2022, 4, 26"
+    DELIVER=True|False
+    RECIPIENT_OVERRIDE="hello.123@localhost"
+    ATHENA_QUERY_ROLE_TO_ASSUME_ARN="arn:aws:iam::<LZ#-ManagementAccountID>:role/BCGov-Athena-Cost-and-Usage-Report"
+    ATHENA_QUERY_DATABASE="athenacurcfn_cost_and_usage_report"
+    QUERY_ORG_ACCOUNTS_ROLE_TO_ASSUME_ARN="arn:aws:iam::<LZ#-ManagementAccountID>:role/BCGov-Query-Org-Accounts"
+    ATHENA_QUERY_OUTPUT_BUCKET="bcgov-ecf-billing-reports-output-<LZ#-ManagementAccountID>-ca-central-1"
+    ATHENA_QUERY_OUTPUT_BUCKET_ARN="arn:aws:s3:::bcgov-ecf-billing-reports-output-<LZ#-ManagementAccountID>-ca-central-1"
+    CMK_SSE_KMS_ALIAS="arn:aws:kms:ca-central-1:<LZ#-ManagementAccountID>:alias/BCGov-BillingReports"
+    """
+
+    logger.info(f"Called manual function")
+    logger.info(f"event_bridge_params: {json.dumps(dict(event_bridge_params))}\n")
+
+    start_date_env_var = datetime.strptime(os.environ["START_DATE"], "%Y, %m, %d")
+    end_date_env_var = datetime.strptime(os.environ["END_DATE"], "%Y, %m, %d")
+
+    start_date = datetime.combine(start_date_env_var, datetime.min.time())
+    end_date = datetime.combine(end_date_env_var, datetime.max.time())
+
+    event_bridge_params.update(
+        {
+            "carbon_copy": None,
+            "billing_groups": None,
+            "start_date": start_date,
+            "end_date": end_date,
+        }
+    )
+    logger.info(f"event_bridge_params_updated: {event_bridge_params}\n")
+
+    bill_manager = BillingManager(event_bridge_params)
+    bill_manager.do()
+
+
+def main():
+    print("Cloud Pathfinder Billing Utility!")
+
+    logger.info(f"Environment Variables: {json.dumps(dict(os.environ))}")
+
+    if os.environ.get("AWS_EXECUTION_ENV"):
+        metadata_uri_v4 = os.environ["ECS_CONTAINER_METADATA_URI_V4"]
+        get_v4_metadata = requests.get(format(metadata_uri_v4))
+        v4_metadata = get_v4_metadata.json()
+        logger.info(f"V4 Metadata: {json.dumps(v4_metadata)}")
+
+    event_bridge_payload = {
+        "report_type": os.environ["REPORT_TYPE"].lower(),
+        "deliver": bool(os.environ["DELIVER"]),
+        "recipient_override": os.environ["RECIPIENT_OVERRIDE"].lower(),
+    }
+    logger.info(f"event_bridge_payload: {json.dumps(dict(event_bridge_payload))}")
+
+    globals()[event_bridge_payload["report_type"]](event_bridge_payload)
 
 
 if __name__ == "__main__":
-
-	def handle_date_range(args):
-		args['start_date'] = datetime.combine(args['start'], datetime.min.time(), tzinfo=timezone.utc)
-		# small fiddle below required to get *actual midnight* at end of date range period - we add a day, but set to earliest time
-		args['end_date'] = datetime.combine(args['end'] + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc)
-
-		return args
-
-
-	def handle_billing_period(args):
-		billing_period = args['billing_period']
-
-		# set to first day of month
-		billing_period_start = billing_period.replace(day=1)
-		# set to start of day
-		billing_period_start = datetime.combine(billing_period_start, datetime.min.time(), tzinfo=timezone.utc)
-
-		# set to *first* day of next month
-		billing_period_end = billing_period.replace(
-			day=calendar.monthrange(billing_period.year, billing_period.month)[1]) + timedelta(days=1)
-		# set to start of day
-		billing_period_end = datetime.combine(billing_period_end, datetime.min.time(), tzinfo=timezone.utc)
-
-		args['start_date'] = billing_period_start
-		args['end_date'] = billing_period_end
-
-		return args
-
-	def handle_weekly(args):
-		billing_period_end = date.today() - timedelta(days=1)
-		billing_period_end = datetime.combine(billing_period_end, datetime.max.time(), tzinfo=timezone.utc)
-
-		billing_period_start = billing_period_end - timedelta(days=6)
-		billing_period_start = datetime.combine(billing_period_start, datetime.min.time(), tzinfo=timezone.utc)
-
-		args['start_date'] = billing_period_start
-		args['end_date'] = billing_period_end
-
-		return args
-
-	def handle_quarterly(args):
-		billing_period_start = date.today()
-		billing_period_end = date.today()
-
-		if (args['quarter'] == 1) :
-			billing_period_start = date(args['year'], 4, 1)
-			billing_period_end = date(args['year'], 7, 1)
-		elif (args['quarter'] == 2) :
-			billing_period_start = date(args['year'], 7, 1)
-			billing_period_end = date(args['year'], 10, 1)
-		elif (args['quarter'] == 3) :
-			billing_period_start = date(args['year'], 10, 1)
-			next_year = args['year'] + 1
-			billing_period_end = date(next_year, 1, 1)
-		elif (args['quarter'] == 4) :
-			billing_period_start = date(args['year'], 1, 1)
-			billing_period_end = date(args['year'], 4, 1)
-		else :
-			raise "The \"--quarter\" flag must be a number from 1 - 4"
-
-		# set to start of day
-		billing_period_start = datetime.combine(billing_period_start, datetime.min.time(), tzinfo=timezone.utc)
-		# set to start of day
-		billing_period_end = datetime.combine(billing_period_end, datetime.min.time(), tzinfo=timezone.utc)
-
-		args['start_date'] = billing_period_start
-		args['end_date'] = billing_period_end
-
-		return args
-
-	def configure_logging(level_string):
-		levels = {
-			'critical': logging.CRITICAL,
-			'error': logging.ERROR,
-			'warn': logging.WARNING,
-			'warning': logging.WARNING,
-			'info': logging.INFO,
-			'debug': logging.DEBUG
-		}
-
-		logging.basicConfig()
-		logger.setLevel(levels.get(level_string.lower()))
-
-
-	parser = argparse.ArgumentParser(prog='billing', description='Processing billing data.')
-
-	subparsers = parser.add_subparsers()
-
-	date_range_subparser = subparsers.add_parser('date', aliases=['dt'])
-	date_range_subparser.add_argument('-s', '--start', type=date.fromisoformat)
-	date_range_subparser.add_argument('-e', '--end', type=date.fromisoformat)
-	date_range_subparser.set_defaults(func=handle_date_range)
-
-	weekly_subparser = subparsers.add_parser('weekly', aliases=['w'])
-	weekly_subparser.set_defaults(func=handle_weekly)
-
-	quarterly_subparser = subparsers.add_parser('quarterly', aliases=['q'])
-	quarterly_subparser.add_argument('-qu', '--quarter', type=int )
-	quarterly_subparser.add_argument('-y', '--year', type=int )
-	quarterly_subparser.set_defaults(func=handle_quarterly)
-
-	billing_period_subparser = subparsers.add_parser('billperiod', aliases=['bp'])
-	billing_period_subparser.add_argument('-b', '--billing_period', type=date.fromisoformat)
-	billing_period_subparser.set_defaults(func=handle_billing_period)
-
-	parser.add_argument('-d', '--deliver', type=bool, default=False, help='True/False value indicating whether email delivery should be done.')
-	parser.add_argument('-ro', '--recipient_override', type=str, help='Email address (typically for testing/verification) to which reports will be delivered instead of account admins.')
-	parser.add_argument('-cc', '--carbon_copy', type=str, help='Email address to which reports will be delivered to, in addition to other recipients.')
-	parser.add_argument('-bgs', '--billing_groups', type=str, help='Comma-separated list of billing groups for which to process billing data.')
-	parser.add_argument('-ll', '--log_level', type=str,
-						 default='warning',
-						 help='Specify logging level. Example --loglevel debug' )
-
-	# argument to allow use of existing query results file
-	parser.add_argument('-q', '--query_results_local_file', type=str,
-						help='Full path to an existing, query output file in CSV format on the local system. If not specified, an Athena query will be performed, and the query results file will be downloaded to the local system.')
-
-
-	args = parser.parse_args()
-	command_line_args = vars(args)
-	args.func(command_line_args)
-
-	configure_logging(args.log_level)
-
-	logger.debug(f"Start date: {command_line_args['start_date']}")
-	logger.debug(f"End  date: {command_line_args['end_date']}")
-
-	main(command_line_args)
+    main()
