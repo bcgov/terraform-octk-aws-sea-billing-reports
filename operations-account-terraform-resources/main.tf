@@ -15,13 +15,7 @@ terraform {
 
   required_version = "~> 1.0"
 
-  #  backend "s3" {
-  #    bucket = "S3-bucket-for-state-files" // eg: bcgov-ecf-billing-reports-tfrb-1234567891-ca-central-1
-  #    key    = "tfrb-aws/operations/terraform.tfstate"
-  #    region = "ca-central-1"
-  #
-  #    dynamodb_table = "bcgov-ecf-billing-reports-tfrb-state-locks"
-  #  }
+  backend "s3" {}
 }
 
 provider "aws" {

@@ -6,7 +6,7 @@ variable "aws_region" {
 }
 
 # Supplied by env var: TF_VAR_operator_account_id
-variable "operator_account_id" {
+variable "ops_account_id" {
   description = "LZ Operator AWS Account ID"
 
   type = string
