@@ -15,7 +15,12 @@ terraform {
 
   required_version = "~> 1.0"
 
-  backend "s3" {}
+  backend "s3" {
+   bucket         = "billing-utility-statebucket-opertaions"
+   key            = "operations-account/terraform.tfstate"
+   region         = "ca-central-1"
+   dynamodb_table = "state-lock"
+ }
 }
 
 provider "aws" {
@@ -140,6 +145,27 @@ resource "aws_iam_policy" "ecs_task_access_policies" {
         ],
         Resource = ["*"] // TODO: Too relaxed. Need to revise for LZ deployment
       },
+      {
+            "Sid": "VisualEditor0",
+            "Effect": "Allow",
+            "Action": [
+                "kms:Decrypt",
+                "kms:Encrypt",
+                "ssm:GetParameters",
+                "ssm:GetParameter"
+            ],
+            "Resource": [
+                "arn:aws:kms:ca-central-1:${data.aws_caller_identity.current.account_id}:key/*",
+                "arn:aws:ssm:ca-central-1:${data.aws_caller_identity.current.account_id}:parameter/bcgov/billingutility/teams_alert_webhook",
+                "arn:aws:ssm:ca-central-1:${data.aws_caller_identity.current.account_id}:parameter/bcgov/billingutility/rocketchat_alert_webhook"
+            ]
+        },
+        {
+            "Sid": "VisualEditor1",
+            "Effect": "Allow",
+            "Action": "ssm:DescribeParameters",
+            "Resource": "*"
+        },
       {
         Sid    = "CloudWatchLogsRelatedPermissions"
         Effect = "Allow",
