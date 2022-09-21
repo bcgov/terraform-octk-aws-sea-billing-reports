@@ -43,6 +43,9 @@ Thumbs.db
 
 ##### Terraform-specific ignores.
 
+# backend configuration
+**/backend.hcl
+
 # Local .terraform directories
 **/.terraform/*
 
@@ -90,3 +93,5 @@ terraform.rc
 /lib
 /pyenv.cfg
 pyvenv.cfg
+
+.vscode/

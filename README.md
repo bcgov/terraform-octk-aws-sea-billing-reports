@@ -1,11 +1,7 @@
-# <application_license_badge>
-
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 
 # OCTK AWS SEA Billing Utility
-
-This repo provides tooling to help process billing data from an AWS SEA into more usable forms including monthly
-tenant "bills".
+This repo contains tooling used by the Cloud Pathfinder team to generate and send AWS ECF billing reports.
 
 ## Project Status
 
@@ -14,90 +10,96 @@ tenant "bills".
 
 ## Background
 
-At one point, there were two billing-related utilities contained in this repo. One was based on a step-function/lambda model running in AWS.  The other - which actually used much of the python code from the lambda version - is more of a "classic" script that can be easily run on a developer or admin's local workstation, or (eventually) in a container, as described [here](https://github.com/bcgov/cloud-pathfinder/issues/1068).
+The current iteration is based off an earlier solution that leveraged Docker. That version required AWS ECF management account admin privileges and relied on  manual execution on an admin/developer workstation. Arguments were managed by argparse. The solution was cumbersome and did not provide a reliable way to produce weekly, monthly and quarterly reports. A rough sketch of how the solution looked is presented below:
 
-The next iteration included a docker runnable billing utility, see below. This avoids storing large report CSVs and other outputs being store locally, and is a step towards [sending automated billing reports via cloudwatch events](https://github.com/bcgov/cloud-pathfinder/issues/1068).
+![Previous State](./docs/figs/png/billing_utility_previous_state.drawio.png)
+
+In line with ticket [1068](https://github.com/bcgov/cloud-pathfinder/issues/1068), the solution was ported to run on AWS ECS Fargate. Weekly, monthly and quarterly report generation are now managed by EventBridge. Input arguments that were initially managed by argparse are now supplied by EventBridge as environment variables.
+
+The revised solution still supports generating billing reports for time ranges outside the last billing fiscal (weekly, monthly and quarterly) periods.
+
+## High Level Overview
+### AWS Services Used
+- Amazon Athena
+- Amazon EventBridge
+- Amazon Glue
+- AWS Elastic Container Repository (ECR)
+- AWS Elastic Container Service (ECS)
+- Amazon Simple Storage Service (S3)
+- Amazon Simple Email Service (SES)
+
+Resources for the current solution is split between the ECF operations and management accounts. Raw billing data is located within an S3 bucket in the ECF management account. Compute operations are performed by resources deployed to the operations account. AWS Glue crawler populates a data catalog in the management account. Athena queries initiated by resources deployed in the operations account extracts raw billing data for a specified date range. This information is saved for further processing in an S3 bucket within the management account.
+
+![Current State](./docs/figs/png/billing_utility_current_state.drawio.png)
+
+Further improvements would involve moving Glue and Athena components from the management account to the operations account. In this approach, cross account replication of the `pbmmaccel-master-phase1` S3 bucket would have billing data available in the operations account. At the time of this writing, the `pbmmaccel-master-phase1` bucket size delta month-over-month is no greater than 50GB.
+
+![Preferred State](./docs/figs/png/billing_utility_preferred_state.drawio.png)
+
 
 ## Getting Started
+Resources used in the current iteration of this solution are located in three directories:
+- **management-account-terraform-resources**: Terraform resources that deployed to the ECF management account. Contains:
+  - Glue resources (Crawler and Data Catalog)
+  - Role needed to query org accounts
+  - Role needed to perform Athena queries against `pbmmaccel-master-phase1`
+  - Customer Managed Key (CMK) used to encrypt data
+- **operations-account-terraform-resources:** Terraform resources that deployed to the ECF operations account. Contains:
+  - Container related resources: ECR, ECS, Fargate and roles
+  - Amazon EventBridge resources
+  - Data needed for manual runs from local machine. Stored in Parameter Store
+- **billing-report-utility:** Python code used by the utility
 
-The current billing utility is contained in the `billing-report-utility` directory. Currently `local` and `Docker` setups are supported.
 
-### Additional Pre-requisites
+### Pending Items
+- Conversion rate from USD to CAD is provided by [Fixer](https://fixer.io/). We're on the free tier which has no uptime or availability guarantees. The service needs to be revised to something more robust. This is set to be addressed by ticket [1727](https://github.com/bcgov/cloud-pathfinder/issues/1727).
+- Monitoring and Alerting: The current iteration does not include monitoring and alerting components. Two key areas that would be beneficial to start with are:
+  - SES related metrics
+    - Bounce and complaint: We need to ensure these rates are low. Bounce rates 5% or greater will result in an account review. Bounce of 10% or greater, can result in AWS pausing the account's ability to send additional emails till the cause of the high bounce rate is addressed. A good reference material on this can be found at: [Amazon SES Sending review process FAQs](https://docs.aws.amazon.com/ses/latest/dg/faqs-enforcement.html)
+    - Send and delivery rates: Would come handy with generating alerts should there be changes in send/delivery patterns (e.g.: emails not sent post quarterly report generation)
+  - ECS performance metrics: Would prove beneficial with identifying potential issues during task execution. We want to ensure we are notified should a task fail (e.g.: out of memory, CPU...etc).
+- Unit testing: This was not in scope for the current refactoring. Would be beneficial to have some unit tests in place. 
 
-- The billing utility requires that Athena has been set up to query "Cost and Usage Reports" as described [here](https://docs.aws.amazon.com/cur/latest/userguide/cur-query-athena.html).
 
-- The billing utility uses [Fixer](https://fixer.io/) to calculate exchange rates from UDS to CAD. you will need to get an API key from them and store it in your local environment as `FX_API_KEY`
+### Generating reports for dates not handled by EventBridge
+Python code contained in the `billing-report-utility` directory can be executed locally to generate billing reports for arbitrary date periods. Several environment variables and permissions are needed in order to do so. The required environment variables can be obtained from the parameter store: `/bcgov/billingutility/manual_run/env_vars` located in the corresponding ECF LZ Operations account. These are as follows:
 
-#### Set up local environment
-
->Note: The Local Billing Utility is built using python3 and uses several open source libraries. Creating a dedicated `virtualenv` (as described [here](https://docs.python.org/3/library/venv.html) is recommended to avoid conflicts/clashes with other python applications and libraries on your machine.
+```shell
+REPORT_TYPE="Manual"
+START_DATE="<YYYY, M, D>" - eg: "2022, 4, 12"
+END_DATE="<YYYY, M, D>" - eg: "2022, 4, 26"
+DELIVER="True|False" # Currently not used. Placeholder for future use
+RECIPIENT_OVERRIDE="hello.123@localhost" # Currently not used. Placeholder for future use
+ATHENA_QUERY_ROLE_TO_ASSUME_ARN="arn:aws:iam::<LZ#-ManagementAccountID>:role/BCGov-Athena-Cost-and-Usage-Report"
+ATHENA_QUERY_DATABASE="athenacurcfn_cost_and_usage_report"
+QUERY_ORG_ACCOUNTS_ROLE_TO_ASSUME_ARN="arn:aws:iam::<LZ#-ManagementAccountID>:role/BCGov-Query-Org-Accounts"
+ATHENA_QUERY_OUTPUT_BUCKET="bcgov-ecf-billing-reports-output-<LZ#-ManagementAccountID>-ca-central-1"
+ATHENA_QUERY_OUTPUT_BUCKET_ARN="arn:aws:s3:::bcgov-ecf-billing-reports-output-<LZ#-ManagementAccountID>-ca-central-1"
+CMK_SSE_KMS_ALIAS="arn:aws:kms:ca-central-1:<LZ#-ManagementAccountID>:alias/BCGov-BillingReports"
+```
+> Note: Running the Python code locally requires several open source libraries. Creating a dedicated `virtualenv` as described [here](https://docs.python.org/3/library/venv.html) is recommended to avoid conflicts/clashes with other Python applications and libraries on your machine.
 
 ```shell
 $ cd billing-report-utility
 $ pip3 install -r requirements.txt
 ```
+Given SES resources are deployed in the ECF LZ operations accounts, you'd need a role in that account to execute the Python script locally. At the time of this writing, the admin role on the operator account is sufficient.
 
-#### Set up Docker environment
-Build the Docker image from the root directory:
-```shell
-docker build -t billing-utility .
-```
+> For local execution, the ECF LZ operations account role must be able to use the CMK corresponding associated with the environment variable: `CMK_SSE_KMS_ALIAS` and also assume corresponding roles associated with environment variables `QUERY_ORG_ACCOUNTS_ROLE_TO_ASSUME_ARN` and `ATHENA_QUERY_ROLE_TO_ASSUME_ARN`. These are resources deployed in the ECF LZ management account. At the time of this writing, the admin role on the operator account is sufficient. As we scale back on permissions, this will likely be revised further.  
 
-Example docker test run:
+Once the appropriate values as indicated above are available, you can easily run the script using the command:
 
 ```shell
-docker run \
--e ARGS="-d true -ro test.email@gov.bc.ca weekly" \
--e AWS_ACCESS_KEY_ID \
--e AWS_SECRET_ACCESS_KEY \
--e AWS_SESSION_TOKEN \
--e AWS_DEFAULT_REGION \
--e FX_API_KEY \
-billing-utility
+python3 billing.py
 ```
-- `ARGS` is a string of all arguments described in the "Usage / Options" section below. The example above is a test run where:
-  - `-d` (DELIVER) is true so the emails will be sent
-  - `-ro` (RECIPIENT_OVERRIDE) is set to `test.email@gov.bc.ca` so it wont be sent to product owners or anyone else
-  - `weekly` is the type of run so it will just look at billing reports from a week ago today
-- The `AWS_*` vars are from an AWS account with permissions as described in the "Prerequisite" in the "Usage / Options" section below
-- `FX_API_KEY` is the key obtained from [Fixer](https://fixer.io/) which provides accurate, current exchange rates
-  - Occasionally this free service will go down but this can be circumnavigated by setting the exchange rate from USD to CAD directly using the env var `FX_RATE`
-
-#### Usage / Options
-
-> Prerequisite: The utility requires access to credentials with appropriate permissions to perform all the AWS operations required. The utility accesses credentials using any of the mechanisms supported by `boto3`, the AWS API library it uses.  For example, by using a credentials file, and optionally, the `AWS_PROFILE` environment variable, or by specifying credentials directly via `AWS_*` environment variables set in your shell.  More details/examples are available in the [boto3 docs](https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html). The specific permission required include reading from the `organizations` API, reading/writing to `s3` buckets, executing `athena` queries, and accessing `ses` APIs to send email.  Ultimately, a purpose-defined role should be created for the purposes of running this script,as described [here](https://github.com/bcgov/cloud-pathfinder/issues/1067).
-
-```shell
-usage: billing [-h] [-d DELIVER] [-ro RECIPIENT_OVERRIDE] [-cc CARBON_COPY] [-bgs BILLING_GROUPS] [-ll LOG_LEVEL] [-q QUERY_RESULTS_LOCAL_FILE] {date,dt,weekly,w,billperiod,bp} ...
-
-Processing billing data.
-
-positional arguments:
-  {date,dt,weekly,w,billperiod,bp}
-
-optional arguments:
-  -h, --help            show this help message and exit
-  -d DELIVER, --deliver DELIVER
-                        True/False value inidicating whether email delivery should be done.
-  -ro RECIPIENT_OVERRIDE, --recipient_override RECIPIENT_OVERRIDE
-                        Email address (typically for testing/verification) to which reports will be delivered instead of account admins.
-  -cc CARBON_COPY, --carbon_copy CARBON_COPY
-                        Email address to which reports will be delivered to, in addition to other recipients.
-  -bgs BILLING_GROUPS, --billing_groups BILLING_GROUPS
-                        Comma-separated list of billing groups for which to process billing data.
-  -ll LOG_LEVEL, --log_level LOG_LEVEL
-                        Specify logging level. Example --loglevel debug
-  -q QUERY_RESULTS_LOCAL_FILE, --query_results_local_file QUERY_RESULTS_LOCAL_FILE
-                        Full path to an existing, query output file in CSV format on the local system. If not specified, an Athena query will be performed, and the query results file will be
-                        downloaded to the local system.
-
-```
-
 Running the utility locally will create files in folders structure below, nested within the `billing-report-utility` directory:
 - `output/<guid>/query_results/query_results.csv`  # *LARGE* CSV file containing all, fine-grained billing records for specified period
 - `output/<guid>/summarized/charges-YYYY-MM-DD-YYYY-DD-MM-ALL.xls`  # Excel file containing summarized billing records for ALL billing groups for specified period
 - `output/<guid>/summarized/charges-YYYY-MM-DD-YYYY-DD-MM-<BILLING_GROUP_NAME>.xls`  # Excel files containing summarized billing records (one file for each  BILLING_GROUP) for specified period.
 - `output/<guid>/reports/YYYY-MM--DD-YYYY-MM-DD-BILLING_GROUP_NAME.html`  # HTML billing report (pivot table) for each billing group, with charges grouped by account and service.
+
+### References/Useful Resources
+- [Querying Cost and Usage Reports using Amazon Athena](https://docs.aws.amazon.com/cur/latest/userguide/cur-query-athena.html).
 
 ## Getting Help or Reporting an Issue
 
