@@ -15,12 +15,7 @@ terraform {
 
   required_version = "~> 1.0"
 
-  backend "s3" {
-    #    bucket         = "billing-utility-statebucket-opertaions"
-    #    key            = "operations-account/terraform.tfstate"
-    #    region         = "ca-central-1"
-    #    dynamodb_table = "state-lock"
-  }
+  backend "s3" {}
 }
 
 provider "aws" {
