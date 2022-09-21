@@ -239,12 +239,12 @@ resource "aws_iam_role_policy_attachment" "athena_cost_and_usage_report_glue_ser
 
 # Create Glue Database
 resource "aws_glue_catalog_database" "athenacurcfn_cost_and_usage_report_database" {
-  name = "athenacurcfn_cost_and_usage_report"
+  name = "cost_and_usage_report_athena_db"
 }
 
 
 resource "aws_glue_crawler" "aws_cur_crawler_cost_and_usage_report" {
-  name          = "AWSCURCrawler-Cost-and-Usage-Report"
+  name          = "Cost-and-Usage-Report-Crawler"
   role          = aws_iam_role.athena_cost_and_usage_report.arn
   database_name = aws_glue_catalog_database.athenacurcfn_cost_and_usage_report_database.name
   description   = "A recurring crawler that keeps your CUR table in Athena up-to-date."
@@ -278,7 +278,7 @@ resource "aws_glue_crawler" "aws_cur_crawler_cost_and_usage_report" {
 
 resource "aws_glue_catalog_table" "cost_and_usage_report" {
   database_name = aws_glue_catalog_database.athenacurcfn_cost_and_usage_report_database.name
-  name          = "cost_and_usage_report"
+  name          = "cost_and_usage_report_athena_table"
 
   table_type = "EXTERNAL_TABLE"
 

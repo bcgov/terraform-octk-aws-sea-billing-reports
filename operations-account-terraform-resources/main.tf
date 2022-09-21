@@ -16,11 +16,11 @@ terraform {
   required_version = "~> 1.0"
 
   backend "s3" {
-   bucket         = "billing-utility-statebucket-opertaions"
-   key            = "operations-account/terraform.tfstate"
-   region         = "ca-central-1"
-   dynamodb_table = "state-lock"
- }
+    #    bucket         = "billing-utility-statebucket-opertaions"
+    #    key            = "operations-account/terraform.tfstate"
+    #    region         = "ca-central-1"
+    #    dynamodb_table = "state-lock"
+  }
 }
 
 provider "aws" {
@@ -146,26 +146,26 @@ resource "aws_iam_policy" "ecs_task_access_policies" {
         Resource = ["*"] // TODO: Too relaxed. Need to revise for LZ deployment
       },
       {
-            "Sid": "VisualEditor0",
-            "Effect": "Allow",
-            "Action": [
-                "kms:Decrypt",
-                "kms:Encrypt",
-                "ssm:GetParameters",
-                "ssm:GetParameter"
-            ],
-            "Resource": [
-                "arn:aws:kms:ca-central-1:${data.aws_caller_identity.current.account_id}:key/*",
-                "arn:aws:ssm:ca-central-1:${data.aws_caller_identity.current.account_id}:parameter/bcgov/billingutility/teams_alert_webhook",
-                "arn:aws:ssm:ca-central-1:${data.aws_caller_identity.current.account_id}:parameter/bcgov/billingutility/rocketchat_alert_webhook"
-            ]
-        },
-        {
-            "Sid": "VisualEditor1",
-            "Effect": "Allow",
-            "Action": "ssm:DescribeParameters",
-            "Resource": "*"
-        },
+        "Sid" : "VisualEditor0",
+        "Effect" : "Allow",
+        "Action" : [
+          "kms:Decrypt",
+          "kms:Encrypt",
+          "ssm:GetParameters",
+          "ssm:GetParameter"
+        ],
+        "Resource" : [
+          "arn:aws:kms:ca-central-1:${data.aws_caller_identity.current.account_id}:key/*",
+          "arn:aws:ssm:ca-central-1:${data.aws_caller_identity.current.account_id}:parameter/bcgov/billingutility/teams_alert_webhook",
+          "arn:aws:ssm:ca-central-1:${data.aws_caller_identity.current.account_id}:parameter/bcgov/billingutility/rocketchat_alert_webhook"
+        ]
+      },
+      {
+        "Sid" : "VisualEditor1",
+        "Effect" : "Allow",
+        "Action" : "ssm:DescribeParameters",
+        "Resource" : "*"
+      },
       {
         Sid    = "CloudWatchLogsRelatedPermissions"
         Effect = "Allow",
@@ -322,7 +322,7 @@ resource "aws_ecs_task_definition" "billing_reports_ecs_task" {
   task_role_arn            = aws_iam_role.ecs_task_role.arn
   runtime_platform {
     operating_system_family = "LINUX"
-#    cpu_architecture        = "ARM64" // Used when testing deployment from Local ARM64 based device
+    #    cpu_architecture        = "ARM64" // Used when testing deployment from Local ARM64 based device
   }
   container_definitions = jsonencode([{
     name       = "${local.app_name}-ecs-container-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}"
@@ -410,7 +410,7 @@ resource "aws_cloudwatch_event_rule" "billing_reports_weekly_rule" {
   name                = "${local.app_name}-weekly-rule"
   description         = "Execute the ${local.app_name} every Friday at noon" // Note: 1900 UTC is 1200 PST
   schedule_expression = "cron(0 19 ? * THUR *)"
-  is_enabled          = false
+  is_enabled          = true
 }
 
 resource "aws_cloudwatch_event_target" "billing_reports_weekly_target" {
@@ -483,7 +483,7 @@ resource "aws_cloudwatch_event_rule" "billing_reports_monthly_rule" {
   name                = "${local.app_name}-monthly-rule"
   description         = "Execute the ${local.app_name} at noon on the first day every month" // Note: 1900 UTC is 1200 PST
   schedule_expression = "cron(0 19 1 * ? *)"
-  is_enabled          = false
+  is_enabled          = true
 }
 
 resource "aws_cloudwatch_event_target" "billing_reports_monthly_target" {
@@ -556,7 +556,7 @@ resource "aws_cloudwatch_event_rule" "billing_reports_quarterly_rule" {
   name                = "${local.app_name}-quarterly-rule"
   description         = "Execute the ${local.app_name} quarterly" // Note: 1900 UTC is 1200 PST
   schedule_expression = "cron(0 19 1 1/3 ? *)"
-  is_enabled          = false
+  is_enabled          = true
 }
 
 resource "aws_cloudwatch_event_target" "billing_reports_quarterly_target" {

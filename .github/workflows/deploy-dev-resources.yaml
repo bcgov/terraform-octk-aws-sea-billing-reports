@@ -42,7 +42,7 @@ jobs:
           cd ./management-account-terraform-resources
           terraform init -input=false -force-copy \
             -backend-config="bucket=${{ secrets.MGMT_TFRB_S3_BUCKET_NAME }}" \
-            -backend-config="key=state-files/terraform-octk-aws-sea-billing-reports/management-account-terraform-resources.tfstate" \
+            -backend-config="key=terraform-octk-aws-sea-billing-reports/management-account-terraform-resources.tfstate" \
             -backend-config="dynamodb_table=${{ secrets.MGMT_TFRB_DYNAMODB_TABLE_NAME }}" \
             -backend-config="region=${{ env.AWS_REGION }}"
 
@@ -108,7 +108,7 @@ jobs:
           cd ./operations-account-terraform-resources
           terraform init -input=false -force-copy \
             -backend-config="bucket=${{ secrets.OPS_TFRB_S3_BUCKET_NAME }}" \
-            -backend-config="key=state-files/terraform-octk-aws-sea-billing-reports/operations-account-terraform-resources.tfstate" \
+            -backend-config="key=terraform-octk-aws-sea-billing-reports/operations-account-terraform-resources.tfstate" \
             -backend-config="dynamodb_table=${{ secrets.OPS_TFRB_DYNAMODB_TABLE_NAME }}" \
             -backend-config="region=${{ env.AWS_REGION }}"
 
