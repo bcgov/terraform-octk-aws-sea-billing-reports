@@ -1,7 +1,7 @@
 import logging
 import os
+import boto3
 from datetime import date
-
 import numpy as np
 import pandas as pd
 import requests
@@ -10,6 +10,9 @@ from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.worksheet.table import Table
+import json
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
@@ -40,30 +43,81 @@ def read_file_into_dataframe(local_file, accounts):
 
 
 def get_exchange_rate():
-    usd_to_cad_rate = 1  # default/dummy value
+    # usd_to_cad_rate= 1
+    AWS_REGION="ca-central-1"
+    ssm_client = boto3.client("ssm", region_name=AWS_REGION)
+    url = "https://api.exchangerate.host/convert?from=USD&to=CAD"
 
-    usd_to_cad_rate_param = os.getenv("FX_RATE")
+    rc_channel = ssm_client.get_parameter(Name='/bcgov/billingutility/rocketchat_alert_webhook', WithDecryption=True)
+    rc_channel_url=rc_channel['Parameter']['Value']
+    teams_channel = ssm_client.get_parameter(Name='/bcgov/billingutility/teams_alert_webhook', WithDecryption=True)
+    teams_channel_url=teams_channel['Parameter']['Value']
 
-    if usd_to_cad_rate_param:
-        usd_to_cad_rate = float(usd_to_cad_rate_param)
-    else:
+
+    requests_session = requests.Session()
+    retries = Retry(
+        total=3,
+        backoff_factor=1,
+        status_forcelist=[429, 500, 502, 503, 504]
+    )
+    requests_session.mount("https://", HTTPAdapter(max_retries=retries))
+
+    try:
         logger.info(
-            f"No value provided for 'FX_RATE'. Will attempt to retrieve current rate via API service."
+    f"requesting conversion rate from{url}"
         )
-        fx_api_key = os.getenv("FX_API_KEY")
-
-        if not fx_api_key:
-            logger.warning(
-                f"No value provided for 'FX_RATE' or 'FX_API_KEY'. Please set a value via an environment variable. No conversion will be done."
-            )
-        else:
-            parameters = {"q": "USD_CAD", "apiKey": fx_api_key, "compact": "ultra"}
-            exchange_rate_response = requests.get(
-                "https://free.currconv.com/api/v7/convert", params=parameters
-            )
-            rate_response_json = exchange_rate_response.json()
-            usd_to_cad_rate = rate_response_json["USD_CAD"]
-
+        response = requests_session.get(url)
+        # print(response.text) # process response
+    except Exception as error:
+        print(error)
+        attachment = [
+            {
+                "title": "Billing report utility failed",
+                "text": f"The error occured is {error}",
+                "color": "#764FA5",
+            }
+        ]
+        rocketChatMessage = {
+            "text": "Billing report utility failed with error",
+            "attachments": attachment,
+        }
+        teamsMessage= {
+    "type":"message",
+    "attachments":[
+        {
+            "contentType":"application/vnd.microsoft.card.adaptive",
+            "contentUrl":None,
+            "content":{
+                "$schema":"http://adaptivecards.io/schemas/adaptive-card.json",
+                "type":"AdaptiveCard",
+                "version":"1.2",
+                "body":[
+                    {
+                    "type": "TextBlock",
+                    "wrap": True,
+                    "text": f"The Billing utility failed due to {error}",
+                    }
+                ]
+            }
+        }
+    ]
+    }
+        requests.post(
+            rc_channel_url,
+            data=json.dumps(rocketChatMessage),
+            headers={
+                "Content-Type": "application/json"},
+        )
+        requests.post(
+            teams_channel_url,
+            data=json.dumps(teamsMessage),
+            headers={
+                "Content-Type": "application/json"},
+        )
+    else:
+        data = response.json()
+        usd_to_cad_rate = float(data["result"])
+        # print(usd_to_cad_rate)
     return usd_to_cad_rate
 
 

@@ -11,6 +11,8 @@ terraform {
   }
 
   required_version = "~> 1.0"
+
+  backend "s3" {}
 }
 
 provider "aws" {
@@ -103,8 +105,7 @@ resource "aws_iam_role" "query_org_accounts" {
         Action = "sts:AssumeRole"
         Principal = {
           AWS = [
-            "arn:aws:iam::${var.operator_account_id}:root", // Change to line below after deployment to LZ0 Operations account
-            #            "arn:aws:iam::${var.operator_account_id}:role/octk-aws-sea-billing-reports-TaskRole",
+            "arn:aws:iam::${var.ops_account_id}:root", // Change to line below after deployment to LZ0 Operations account
           ]
         }
       }
@@ -119,7 +120,7 @@ resource "aws_iam_role_policy_attachment" "query_org_accounts_access" {
 }
 
 # Role needed for Glue Crawler
-# Grant Operator account access to assume role via STS
+# Grant Operations account access to assume role via STS
 resource "aws_iam_role" "athena_cost_and_usage_report" {
   name = "${local.app_name}-Athena-Cost-and-Usage-Report"
 
@@ -140,8 +141,7 @@ resource "aws_iam_role" "athena_cost_and_usage_report" {
         Action = "sts:AssumeRole"
         Principal = {
           AWS = [
-            "arn:aws:iam::${var.operator_account_id}:root", // Maybe change to line below after deployment to LZ Operations account
-            #            "arn:aws:iam::${var.operator_account_id}:role/octk-aws-sea-billing-reports-TaskRole",
+            "arn:aws:iam::${var.ops_account_id}:root", // Maybe change to line below after deployment to LZ Operations account
           ]
         }
       }
@@ -239,12 +239,12 @@ resource "aws_iam_role_policy_attachment" "athena_cost_and_usage_report_glue_ser
 
 # Create Glue Database
 resource "aws_glue_catalog_database" "athenacurcfn_cost_and_usage_report_database" {
-  name = "athenacurcfn_cost_and_usage_report"
+  name = "cost_and_usage_report_athena_db"
 }
 
 
 resource "aws_glue_crawler" "aws_cur_crawler_cost_and_usage_report" {
-  name          = "AWSCURCrawler-Cost-and-Usage-Report"
+  name          = "Cost-and-Usage-Report-Crawler"
   role          = aws_iam_role.athena_cost_and_usage_report.arn
   database_name = aws_glue_catalog_database.athenacurcfn_cost_and_usage_report_database.name
   description   = "A recurring crawler that keeps your CUR table in Athena up-to-date."
@@ -278,7 +278,7 @@ resource "aws_glue_crawler" "aws_cur_crawler_cost_and_usage_report" {
 
 resource "aws_glue_catalog_table" "cost_and_usage_report" {
   database_name = aws_glue_catalog_database.athenacurcfn_cost_and_usage_report_database.name
-  name          = "cost_and_usage_report"
+  name          = "cost_and_usage_report_athena_table"
 
   table_type = "EXTERNAL_TABLE"
 
