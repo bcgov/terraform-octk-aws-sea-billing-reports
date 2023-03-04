@@ -47,7 +47,6 @@ def weekly(event_bridge_params):
 
     event_bridge_params.update(
         {
-            "carbon_copy": None,
             "billing_groups": None,
             "start_date": start_date,
             "end_date": end_date,
@@ -84,7 +83,6 @@ def monthly(event_bridge_params):
 
     event_bridge_params.update(
         {
-            "carbon_copy": None,
             "billing_groups": None,
             "start_date": start_date,
             "end_date": end_date,
@@ -133,7 +131,6 @@ def quarterly(event_bridge_params):
 
     event_bridge_params.update(
         {
-            "carbon_copy": None,
             "billing_groups": None,
             "start_date": start_date,
             "end_date": end_date,
@@ -175,7 +172,6 @@ def manual(event_bridge_params):
 
     event_bridge_params.update(
         {
-            "carbon_copy": None,
             "billing_groups": None,
             "start_date": start_date,
             "end_date": end_date,
@@ -202,6 +198,7 @@ def main():
         "report_type": os.environ["REPORT_TYPE"].lower(),
         "deliver": bool(os.environ["DELIVER"]),
         "recipient_override": os.environ["RECIPIENT_OVERRIDE"].lower(),
+        "carbon_copy": os.environ["CARBON_COPY"].lower(),
     }
     logger.info(f"event_bridge_payload: {json.dumps(dict(event_bridge_payload))}")
 

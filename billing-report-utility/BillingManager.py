@@ -98,12 +98,15 @@ class BillingManager:
         return formatted_account_info
 
     def __deliver_reports(self, billing_group_totals):
-
         for billing_group, attachments in self.delivery_outbox.items():
             billing_group_email = self.emails_for_billing_groups.get(
                 billing_group
             ).pop()
-            recipient_email = billing_group_email
+
+            if self.query_parameters.get("recipient_override"):
+                recipient_email = self.query_parameters.get("recipient_override")
+            else:
+                recipient_email = billing_group_email
 
             subject = (
                 f"Cloud Consumption Report ${billing_group_totals.get(billing_group)} for "
@@ -266,5 +269,6 @@ class BillingManager:
         billing_group_totals = self.reports(
             query_results_output_file_local_path, reports_local_path
         )
-
-        self.__deliver_reports(billing_group_totals)
+        
+        if self.query_parameters.get("deliver"):
+            self.__deliver_reports(billing_group_totals)
