@@ -18,7 +18,7 @@ jinja_env = Environment(loader=FileSystemLoader("."))
 jinja_template = jinja_env.get_template("./templates/email_body.jinja2")
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 handler = logging.StreamHandler(sys.stdout)
 handler.setFormatter(formatter)
@@ -98,13 +98,16 @@ class BillingManager:
         return formatted_account_info
 
     def __deliver_reports(self, billing_group_totals):
+        logger.info("Delivering Cloud Consumption Reports...")
+
         for billing_group, attachments in self.delivery_outbox.items():
             billing_group_email = self.emails_for_billing_groups.get(
                 billing_group
             ).pop()
 
-            if self.query_parameters.get("recipient_override"):
-                recipient_email = self.query_parameters.get("recipient_override")
+            override_email_address = self.query_parameters.get("recipient_override")
+            if override_email_address and override_email_address != "":
+                recipient_email = override_email_address
             else:
                 recipient_email = billing_group_email
 
@@ -126,23 +129,30 @@ class BillingManager:
                 }
             )
 
-            logger.debug(
-                f"Sending email to '{recipient_email}' with subject '{subject}'"
-            )
+            logger.debug(f"Sending email to '{recipient_email}' with subject '{subject}'")
 
-            if "carbon_copy" in self.query_parameters:
-                logger.debug(
-                    f"Email carbon copy will be sent to '{self.query_parameters['carbon_copy']}'."
+            cc_email_address = self.query_parameters.get("carbon_copy")
+            if cc_email_address and cc_email_address != "":
+                logger.debug(f"Email carbon copy will be sent to '{cc_email_address}'.")
+
+                email_result = send_email(
+                    sender="info@cloud.gov.bc.ca",
+                    recipient=recipient_email,
+                    cc=cc_email_address,
+                    subject=subject,
+                    body_text=body_text,
+                    attachments=attachments,
                 )
+            else: 
+                logger.debug("Email will be sent with no carbon copy field.")
 
-            email_result = send_email(
-                sender="info@cloud.gov.bc.ca",
-                recipient=recipient_email,
-                subject=subject,
-                cc=self.query_parameters.get("carbon_copy"),
-                body_text=body_text,
-                attachments=attachments,
-            )
+                email_result = send_email(
+                      sender="info@cloud.gov.bc.ca",
+                      recipient=recipient_email,
+                      subject=subject,
+                      body_text=body_text,
+                      attachments=attachments,
+                  )
 
             logger.debug(f"Email result: {email_result}.")
 

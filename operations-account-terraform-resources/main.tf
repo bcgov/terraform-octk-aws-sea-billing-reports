@@ -581,7 +581,7 @@ resource "aws_cloudwatch_event_target" "billing_reports_quarterly_target" {
           "value" = "True"
         },
         {
-          "name"  = "RECIPIENT_OVERRIDE", # Quarterly rns should not be sent to clients
+          "name"  = "RECIPIENT_OVERRIDE", # Quarterly runs should not be sent to clients
           "value" = "cloud.pathfinder@gov.bc.ca"
         },
         {
@@ -640,7 +640,7 @@ resource "aws_ssm_parameter" "manual_run_environment_variables" {
     "export START_DATE" : "",
     "export END_DATE" : "",
     "export DELIVER" : "False",
-    "export RECIPIENT_OVERRIDE" : "",
+    "export RECIPIENT_OVERRIDE" : "your.email@here.ca",
     "export CARBON_COPY" : "",
     "export ATHENA_QUERY_ROLE_TO_ASSUME_ARN" : "arn:aws:iam::${var.lz_mgmt_account_id}:role/BCGov-Athena-Cost-and-Usage-Report",
     "export ATHENA_QUERY_DATABASE" : "cost_and_usage_report_athena_db"
