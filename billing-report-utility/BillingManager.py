@@ -18,7 +18,7 @@ jinja_env = Environment(loader=FileSystemLoader("."))
 jinja_template = jinja_env.get_template("./templates/email_body.jinja2")
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 handler = logging.StreamHandler(sys.stdout)
 handler.setFormatter(formatter)
