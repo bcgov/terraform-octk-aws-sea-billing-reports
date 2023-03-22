@@ -78,11 +78,11 @@ Python code contained in the `billing-report-utility` directory can be executed 
 REPORT_TYPE="Manual"
 START_DATE="<YYYY, M, D>" - eg: "2022, 4, 12"
 END_DATE="<YYYY, M, D>" - eg: "2022, 4, 26"
-DELIVER="True|False" # Be very careful with this as if RECIPIENT_OVERRIDE is not set a value of True here will send emails to ALL CLIENTS
+DELIVER="True|False" # Be very careful with this as if RECIPIENT_OVERRIDE is not set and DELIVER is True here then this will send emails to ALL CLIENTS
 RECIPIENT_OVERRIDE="hello.123@localhost" # For testing purposes set this to your own email, it will override all client emails
 CARBON_COPY="hello.123@localhost"
 ATHENA_QUERY_ROLE_TO_ASSUME_ARN="arn:aws:iam::<LZ#-ManagementAccountID>:role/BCGov-Athena-Cost-and-Usage-Report"
-ATHENA_QUERY_DATABASE="athenacurcfn_cost_and_usage_report"
+ATHENA_QUERY_DATABASE="cost_and_usage_report_athena_db"
 QUERY_ORG_ACCOUNTS_ROLE_TO_ASSUME_ARN="arn:aws:iam::<LZ#-ManagementAccountID>:role/BCGov-Query-Org-Accounts"
 ATHENA_QUERY_OUTPUT_BUCKET="bcgov-ecf-billing-reports-output-<LZ#-ManagementAccountID>-ca-central-1"
 ATHENA_QUERY_OUTPUT_BUCKET_ARN="arn:aws:s3:::bcgov-ecf-billing-reports-output-<LZ#-ManagementAccountID>-ca-central-1"
