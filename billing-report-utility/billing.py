@@ -47,7 +47,6 @@ def weekly(event_bridge_params):
 
     event_bridge_params.update(
         {
-            "carbon_copy": None,
             "billing_groups": None,
             "start_date": start_date,
             "end_date": end_date,
@@ -84,7 +83,6 @@ def monthly(event_bridge_params):
 
     event_bridge_params.update(
         {
-            "carbon_copy": None,
             "billing_groups": None,
             "start_date": start_date,
             "end_date": end_date,
@@ -133,7 +131,6 @@ def quarterly(event_bridge_params):
 
     event_bridge_params.update(
         {
-            "carbon_copy": None,
             "billing_groups": None,
             "start_date": start_date,
             "end_date": end_date,
@@ -157,7 +154,7 @@ def manual(event_bridge_params):
     DELIVER=True|False
     RECIPIENT_OVERRIDE="hello.123@localhost"
     ATHENA_QUERY_ROLE_TO_ASSUME_ARN="arn:aws:iam::<LZ#-ManagementAccountID>:role/BCGov-Athena-Cost-and-Usage-Report"
-    ATHENA_QUERY_DATABASE="athenacurcfn_cost_and_usage_report"
+    ATHENA_QUERY_DATABASE="cost_and_usage_report_athena_db"
     QUERY_ORG_ACCOUNTS_ROLE_TO_ASSUME_ARN="arn:aws:iam::<LZ#-ManagementAccountID>:role/BCGov-Query-Org-Accounts"
     ATHENA_QUERY_OUTPUT_BUCKET="bcgov-ecf-billing-reports-output-<LZ#-ManagementAccountID>-ca-central-1"
     ATHENA_QUERY_OUTPUT_BUCKET_ARN="arn:aws:s3:::bcgov-ecf-billing-reports-output-<LZ#-ManagementAccountID>-ca-central-1"
@@ -175,7 +172,6 @@ def manual(event_bridge_params):
 
     event_bridge_params.update(
         {
-            "carbon_copy": None,
             "billing_groups": None,
             "start_date": start_date,
             "end_date": end_date,
@@ -200,8 +196,9 @@ def main():
 
     event_bridge_payload = {
         "report_type": os.environ["REPORT_TYPE"].lower(),
-        "deliver": bool(os.environ["DELIVER"]),
+        "deliver": os.environ["DELIVER"].lower() == "true", # env vars cannot be boolean so we have to evaluate the string here
         "recipient_override": os.environ["RECIPIENT_OVERRIDE"].lower(),
+        "carbon_copy": os.environ["CARBON_COPY"].lower(),
     }
     logger.info(f"event_bridge_payload: {json.dumps(dict(event_bridge_payload))}")
 
