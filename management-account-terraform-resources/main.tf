@@ -248,7 +248,7 @@ resource "aws_glue_crawler" "aws_cur_crawler_cost_and_usage_report" {
   role          = aws_iam_role.athena_cost_and_usage_report.arn
   database_name = aws_glue_catalog_database.athenacurcfn_cost_and_usage_report_database.name
   description   = "A recurring crawler that keeps your CUR table in Athena up-to-date."
-  schedule      = "cron(0 0 1 * ? *)" // Run crawler first day of each month at 00:00:00 UTC
+  schedule      = "cron(0 * * * ? *)" // Run crawler every hour. NOTE: previously the crawler ran "on demand", I'm implemeting this hourly run so that the weekly reports wont fail until we can figure out why on demand isn't working with the new design.
 
   s3_target {
     path = "s3://pbmmaccel-master-phase1-cacentral1-${var.mgmt_account_phase1_bucket_suffix}/${data.aws_caller_identity.current.account_id}/cur/Cost-and-Usage-Report/Cost-and-Usage-Report/"
