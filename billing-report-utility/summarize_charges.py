@@ -126,28 +126,36 @@ def enhance_with_metadata(df, accounts):
 
     exchange_rate = get_exchange_rate()
 
+    def get_account_metadata(account_id, field):
+        account_details = account_details_by_account_id.get(account_id)
+        if account_details:
+            return account_details.get(field)
+        else:
+            return f"Missing Account: {account_id}"
+
     df["Billing_Group"] = df["line_item_usage_account_id"].apply(
-        lambda x: account_details_by_account_id[x].get("billing_group")
+        lambda x: get_account_metadata(x, "billing_group")
     )
     df["Owner_Name"] = df["line_item_usage_account_id"].apply(
-        lambda x: account_details_by_account_id[x].get("admin_contact_name")
+        lambda x: get_account_metadata(x, "admin_contact_name")
     )
     df["Owner_Email"] = df["line_item_usage_account_id"].apply(
-        lambda x: account_details_by_account_id[x].get("admin_contact_email")
+        lambda x: get_account_metadata(x, "admin_contact_email")
     )
     df["Project"] = df["line_item_usage_account_id"].apply(
-        lambda x: account_details_by_account_id[x].get("Project")
+        lambda x: get_account_metadata(x, "Project")
     )
     df["Environment"] = df["line_item_usage_account_id"].apply(
-        lambda x: account_details_by_account_id[x].get("Environment")
+        lambda x: get_account_metadata(x, "Environment")
     )
     df["Account_Name"] = df["line_item_usage_account_id"].apply(
-        lambda x: account_details_by_account_id[x]["name"]
+        lambda x: get_account_metadata(x, "name")
     )
     df["License_Plate"] = df["line_item_usage_account_id"].apply(
-        lambda x: account_details_by_account_id[x].get("license_plate")
+        lambda x: get_account_metadata(x, "license_plate")
     )
     df["CAD"] = df["line_item_blended_cost"].apply(lambda x: x * exchange_rate)
+
 
 
 def make_account_by_id_lookup(accounts):
