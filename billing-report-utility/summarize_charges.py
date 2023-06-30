@@ -24,6 +24,7 @@ grouping_columns = [
     "Project",
     "License_Plate",
     "Environment",
+    "Account_Coding",
     "Billing_Group",
     "Owner_Name",
     "Owner_Email",
@@ -44,15 +45,14 @@ def read_file_into_dataframe(local_file, accounts):
 
 def get_exchange_rate():
     # usd_to_cad_rate= 1
-    AWS_REGION="ca-central-1"
+    AWS_REGION = "ca-central-1"
     ssm_client = boto3.client("ssm", region_name=AWS_REGION)
     url = "https://api.exchangerate.host/convert?from=USD&to=CAD"
 
     rc_channel = ssm_client.get_parameter(Name='/bcgov/billingutility/rocketchat_alert_webhook', WithDecryption=True)
-    rc_channel_url=rc_channel['Parameter']['Value']
+    rc_channel_url = rc_channel['Parameter']['Value']
     teams_channel = ssm_client.get_parameter(Name='/bcgov/billingutility/teams_alert_webhook', WithDecryption=True)
-    teams_channel_url=teams_channel['Parameter']['Value']
-
+    teams_channel_url = teams_channel['Parameter']['Value']
 
     requests_session = requests.Session()
     retries = Retry(
@@ -64,7 +64,7 @@ def get_exchange_rate():
 
     try:
         logger.info(
-    f"requesting conversion rate from{url}"
+            f"requesting conversion rate from{url}"
         )
         response = requests_session.get(url)
         # print(response.text) # process response
@@ -81,27 +81,27 @@ def get_exchange_rate():
             "text": "Billing report utility failed with error",
             "attachments": attachment,
         }
-        teamsMessage= {
-    "type":"message",
-    "attachments":[
-        {
-            "contentType":"application/vnd.microsoft.card.adaptive",
-            "contentUrl":None,
-            "content":{
-                "$schema":"http://adaptivecards.io/schemas/adaptive-card.json",
-                "type":"AdaptiveCard",
-                "version":"1.2",
-                "body":[
-                    {
-                    "type": "TextBlock",
-                    "wrap": True,
-                    "text": f"The Billing utility failed due to {error}",
+        teamsMessage = {
+            "type": "message",
+            "attachments": [
+                {
+                    "contentType": "application/vnd.microsoft.card.adaptive",
+                    "contentUrl": None,
+                    "content": {
+                        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                        "type": "AdaptiveCard",
+                        "version": "1.2",
+                        "body": [
+                            {
+                                "type": "TextBlock",
+                                "wrap": True,
+                                "text": f"The Billing utility failed due to {error}",
+                            }
+                        ]
                     }
-                ]
-            }
+                }
+            ]
         }
-    ]
-    }
         requests.post(
             rc_channel_url,
             data=json.dumps(rocketChatMessage),
@@ -126,6 +126,9 @@ def enhance_with_metadata(df, accounts):
 
     exchange_rate = get_exchange_rate()
 
+    df["Account_Coding"] = df["line_item_usage_account_id"].apply(
+        lambda x: account_details_by_account_id[x].get("account_coding")
+    )
     df["Billing_Group"] = df["line_item_usage_account_id"].apply(
         lambda x: account_details_by_account_id[x].get("billing_group")
     )
@@ -170,13 +173,17 @@ def report(
 
     df = read_file_into_dataframe(query_results_file, accounts)
 
-    billing_groups = set([account["billing_group"] for account in accounts])
+    if os.environ.get("GROUP_TYPE") == "account_coding":
+        billing_groups = set([account["account_coding"] for account in accounts])
+    else:
+        billing_groups = set([account["billing_group"] for account in accounts])
 
     # Total CAD for each billing group
     billing_group_totals = {}
 
     for billing_group in billing_groups:
-        billing_temp = df.query(f'(Billing_Group == "{billing_group}")')
+        # billing_temp = df.query(f'(Billing_Group == "{billing_group}")')
+        billing_temp = df.query(f'(Account_Coding == "{billing_group}")')
 
         sum_all_columns = billing_temp.sum(axis=0, skipna=True, numeric_only=True)
         sum_cad = sum_all_columns["CAD"]
@@ -234,10 +241,14 @@ def aggregate(query_results_file, summary_output_path, accounts, query_parameter
 
     create_excel(df, f"{summary_output_path}/charges-{filename_prefix}-ALL.xlsx")
 
-    billing_groups = set([account["billing_group"] for account in accounts])
+    if os.environ.get("GROUP_TYPE") == "account_coding":
+        billing_groups = set([account["account_coding"] for account in accounts])
+    else:
+        billing_groups = set([account["billing_group"] for account in accounts])
 
     for billing_group in billing_groups:
-        group_df = df.query(f'Billing_Group == "{billing_group}"')
+        # group_df = df.query(f'Billing_Group == "{billing_group}"')
+        group_df = df.query(f'Account_Coding == "{billing_group}"')
 
         excel_output_path = (
             f"{summary_output_path}/charges-{filename_prefix}-{billing_group}.xlsx"

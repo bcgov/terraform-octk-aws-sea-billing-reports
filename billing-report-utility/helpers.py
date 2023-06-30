@@ -87,6 +87,7 @@ def query_org_accounts():
     page_iterator = paginator.paginate()
 
     core_billing_group_tags = {
+        "account_coding": "SEA Core",
         "billing_group": "SEA Core",
         "admin_contact_email": "julian.subda@gov.bc.ca",
         "admin_contact_name": "Julian Subda",
@@ -113,7 +114,7 @@ def query_org_accounts():
 
             account_details.update(transposed_tags)
 
-            if not transposed_tags.get("billing_group", None):
+            if not transposed_tags.get("billing_group", None) or not transposed_tags.get("account_coding", None):
                 logger.debug(
                     f"Account '{account_details['id']}' missing metadata tags; applying defaults."
                 )

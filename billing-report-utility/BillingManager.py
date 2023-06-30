@@ -143,16 +143,16 @@ class BillingManager:
                     body_text=body_text,
                     attachments=attachments,
                 )
-            else: 
+            else:
                 logger.debug("Email will be sent with no carbon copy field.")
 
                 email_result = send_email(
-                      sender="info@cloud.gov.bc.ca",
-                      recipient=recipient_email,
-                      subject=subject,
-                      body_text=body_text,
-                      attachments=attachments,
-                  )
+                    sender="info@cloud.gov.bc.ca",
+                    recipient=recipient_email,
+                    subject=subject,
+                    body_text=body_text,
+                    attachments=attachments,
+                )
 
             logger.debug(f"Email result: {email_result}.")
 
@@ -279,6 +279,6 @@ class BillingManager:
         billing_group_totals = self.reports(
             query_results_output_file_local_path, reports_local_path
         )
-        
+
         if self.query_parameters.get("deliver"):
             self.__deliver_reports(billing_group_totals)
