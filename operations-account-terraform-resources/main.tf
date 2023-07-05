@@ -423,6 +423,10 @@ resource "aws_cloudwatch_event_target" "billing_reports_weekly_target" {
           "value" = "Weekly"
         },
         {
+          "name"  = "GROUP_TYPE",
+          "value" = "billing_group"
+        },
+        {
           "name"  = "DELIVER", # for manual runs/ testing
           "value" = "True"
         },
@@ -500,6 +504,10 @@ resource "aws_cloudwatch_event_target" "billing_reports_monthly_target" {
           "value" = "Monthly"
         },
         {
+          "name"  = "GROUP_TYPE",
+          "value" = "billing_group"
+        },
+        {
           "name"  = "DELIVER", # for manual runs/ testing
           "value" = "True"
         },
@@ -575,6 +583,10 @@ resource "aws_cloudwatch_event_target" "billing_reports_quarterly_target" {
         {
           "name"  = "REPORT_TYPE",
           "value" = "Quarterly"
+        },
+        {
+          "name"  = "GROUP_TYPE",
+          "value" = "account_coding"
         },
         {
           "name"  = "DELIVER", # for manual runs/ testing
