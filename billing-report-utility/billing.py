@@ -186,7 +186,7 @@ def manual(event_bridge_params):
 def main():
     print("Cloud Pathfinder Billing Utility!")
 
-    logger.info(f"Environment Variables: {json.dumps(dict(os.environ))}")
+    logger.debug(f"Environment Variables: {json.dumps(dict(os.environ))}")
 
     if os.environ.get("AWS_EXECUTION_ENV"):
         metadata_uri_v4 = os.environ["ECS_CONTAINER_METADATA_URI_V4"]
@@ -196,7 +196,7 @@ def main():
 
     event_bridge_payload = {
         "report_type": os.environ["REPORT_TYPE"].lower(),
-        "deliver": os.environ["DELIVER"].lower() == "true", # env vars cannot be boolean so we have to evaluate the string here
+        "deliver": os.environ["DELIVER"].lower() == "true",  # env vars cannot be boolean so we have to evaluate the string here
         "recipient_override": os.environ["RECIPIENT_OVERRIDE"].lower(),
         "carbon_copy": os.environ["CARBON_COPY"].lower(),
     }

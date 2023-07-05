@@ -182,15 +182,15 @@ def report(
     billing_group_totals = {}
 
     for billing_group in billing_groups:
-        # billing_temp = df.query(f'(Billing_Group == "{billing_group}")')
-        billing_temp = df.query(f'(Account_Coding == "{billing_group}")')
+        group_type = "Account_Coding" if os.environ.get("GROUP_TYPE") == "account_coding" else "Billing_Group"
+        group_df = df.query(f'({group_type} == "{billing_group}")')
 
-        sum_all_columns = billing_temp.sum(axis=0, skipna=True, numeric_only=True)
+        sum_all_columns = group_df.sum(axis=0, skipna=True, numeric_only=True)
         sum_cad = sum_all_columns["CAD"]
         billing_group_totals[billing_group] = round(sum_cad, 2)
 
         billing = pd.pivot_table(
-            billing_temp,
+            group_df,
             index=grouping_columns,
             values=["line_item_blended_cost", "CAD"],
             aggfunc=[np.sum],
@@ -224,7 +224,8 @@ def report(
         cb(billing_group, report_file_name)
 
     if quarterly_report_config:
-        report_file_name = f"{report_output_path}/quarterly_report-{quarterly_report_config['year']}-q_{quarterly_report_config['quarter']}.xlsx"
+        format_string = "%Y-%m-%d"
+        report_file_name = f"{report_output_path}/quarterly_report-{date.strftime(query_parameters['start_date'], format_string)}-{date.strftime(query_parameters['end_date'], format_string)}.xlsx"
         create_quarterly_excel(billing_group_totals, report_file_name)
 
         # invoke callback to pass back generated file to caller for current billing group
@@ -241,14 +242,12 @@ def aggregate(query_results_file, summary_output_path, accounts, query_parameter
 
     create_excel(df, f"{summary_output_path}/charges-{filename_prefix}-ALL.xlsx")
 
-    if os.environ.get("GROUP_TYPE") == "account_coding":
-        billing_groups = set([account["account_coding"] for account in accounts])
-    else:
-        billing_groups = set([account["billing_group"] for account in accounts])
+    group_type = "account_coding" if os.environ.get("GROUP_TYPE") == "account_coding" else "billing_group"
+    billing_groups = set([account[group_type] for account in accounts])
 
     for billing_group in billing_groups:
-        # group_df = df.query(f'Billing_Group == "{billing_group}"')
-        group_df = df.query(f'Account_Coding == "{billing_group}"')
+        group_type = "Account_Coding" if os.environ.get("GROUP_TYPE") == "account_coding" else "Billing_Group"
+        group_df = df.query(f'({group_type} == "{billing_group}")')
 
         excel_output_path = (
             f"{summary_output_path}/charges-{filename_prefix}-{billing_group}.xlsx"

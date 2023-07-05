@@ -37,7 +37,7 @@ class BillingManager:
             "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"
         )
 
-        self.quarterly_report_config = None
+        self.quarterly_report_config = os.environ.get("REPORT_TYPE") == "Quarterly"
 
         if os.environ["AWS_DEFAULT_REGION"]:
             self.aws_default_region = os.environ["AWS_DEFAULT_REGION"]
@@ -61,9 +61,10 @@ class BillingManager:
 
         # create a lookup to allow us to easily derive the "owner" email address
         # for a given billing group
+        group_type = "account_coding" if os.environ.get("GROUP_TYPE") == "account_coding" else "billing_group"
         self.emails_for_billing_groups = defaultdict(set)
         for account in self.org_accounts:
-            self.emails_for_billing_groups[account["billing_group"]].add(
+            self.emails_for_billing_groups[account[group_type]].add(
                 account["admin_contact_email"]
             )
 
@@ -100,40 +101,66 @@ class BillingManager:
     def __deliver_reports(self, billing_group_totals):
         logger.info("Delivering Cloud Consumption Reports...")
 
-        for billing_group, attachments in self.delivery_outbox.items():
-            billing_group_email = self.emails_for_billing_groups.get(
-                billing_group
-            ).pop()
-
-            override_email_address = self.query_parameters.get("recipient_override")
-            if override_email_address and override_email_address != "":
-                recipient_email = override_email_address
-            else:
-                recipient_email = billing_group_email
-
+        if os.environ.get("REPORT_TYPE") == "Quarterly":
+            recipient_email = self.query_parameters.get("recipient_override")
+            carbon_copy = self.query_parameters.get("carbon_copy")
+            cc_email_address = carbon_copy if carbon_copy and carbon_copy != "" else None
             subject = (
-                f"Cloud Consumption Report ${billing_group_totals.get(billing_group)} for "
+                f"Cloud Consumption Quarterly Report for "
                 f"{self.query_parameters['start_date'].strftime('%d-%m-%Y')} to "
                 f"{self.query_parameters['end_date'].strftime('%d-%m-%Y')}."
             )
-
-            body_text = jinja_template.render(
-                {
-                    "billing_group_email": billing_group_email,
-                    "start_date": self.query_parameters.get("start_date"),
-                    "end_date": self.query_parameters.get("end_date"),
-                    "billing_group_total": billing_group_totals.get(billing_group),
-                    "list_of_accounts": self.format_account_info_for_email(
-                        billing_group
-                    ),
-                }
+            body_text = (
+                f"Attached is the quarterly report for "
+                f"{self.query_parameters['start_date'].strftime('%d-%m-%Y')} to "
+                f"{self.query_parameters['end_date'].strftime('%d-%m-%Y')}."
             )
+            attachment = self.delivery_outbox.get("QUARTERLY_REPORT")
 
-            logger.debug(f"Sending email to '{recipient_email}' with subject '{subject}'")
+            logger.debug(f"Sending email to '{recipient_email}' and CC to '{cc_email_address}' with subject '{subject}'")
 
-            cc_email_address = self.query_parameters.get("carbon_copy")
-            if cc_email_address and cc_email_address != "":
-                logger.debug(f"Email carbon copy will be sent to '{cc_email_address}'.")
+            email_result = send_email(sender="info@cloud.gov.bc.ca",
+                                      recipient=recipient_email,
+                                      subject=subject,
+                                      cc=cc_email_address,
+                                      body_text=body_text,
+                                      attachments=attachment)
+
+            logger.debug(f"Email result: {email_result}.")
+        else:
+            for billing_group, attachments in self.delivery_outbox.items():
+                override_email_address = self.query_parameters.get("recipient_override")
+                if override_email_address and override_email_address != "":
+                    recipient_email = override_email_address
+                else:
+                    billing_group_email = self.emails_for_billing_groups.get(
+                        billing_group
+                    ).pop()
+
+                    recipient_email = billing_group_email
+
+                subject = (
+                    f"Cloud Consumption Report ${billing_group_totals.get(billing_group)} for "
+                    f"{self.query_parameters['start_date'].strftime('%d-%m-%Y')} to "
+                    f"{self.query_parameters['end_date'].strftime('%d-%m-%Y')}."
+                )
+
+                body_text = jinja_template.render(
+                    {
+                        "billing_group_email": recipient_email,
+                        "start_date": self.query_parameters.get("start_date"),
+                        "end_date": self.query_parameters.get("end_date"),
+                        "billing_group_total": billing_group_totals.get(billing_group),
+                        "list_of_accounts": self.format_account_info_for_email(
+                            billing_group
+                        ),
+                    }
+                )
+
+                carbon_copy = self.query_parameters.get("carbon_copy")
+                cc_email_address = carbon_copy if carbon_copy and carbon_copy != "" else None
+
+                logger.debug(f"Sending email to '{recipient_email}' and CC to '{cc_email_address}' with subject '{subject}'")
 
                 email_result = send_email(
                     sender="info@cloud.gov.bc.ca",
@@ -143,18 +170,8 @@ class BillingManager:
                     body_text=body_text,
                     attachments=attachments,
                 )
-            else:
-                logger.debug("Email will be sent with no carbon copy field.")
 
-                email_result = send_email(
-                    sender="info@cloud.gov.bc.ca",
-                    recipient=recipient_email,
-                    subject=subject,
-                    body_text=body_text,
-                    attachments=attachments,
-                )
-
-            logger.debug(f"Email result: {email_result}.")
+                logger.debug(f"Email result: {email_result}.")
 
     def __run_query(self):
         logger.info("Querying data...")
