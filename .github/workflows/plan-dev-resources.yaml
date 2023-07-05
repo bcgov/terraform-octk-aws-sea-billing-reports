@@ -1,5 +1,5 @@
 ---
-name: "Deploy Dev (LZ0) Resources"
+name: "Plan Dev (LZ0) Resources"
 
 on:
   pull_request:
@@ -11,7 +11,7 @@ permissions:
   contents: read # This is required for actions/checkout@v2
 
 jobs:
-  DeployMgmtAccountResources:
+  PlanMgmtAccountResources:
     runs-on: ubuntu-latest
     environment: dev
 
@@ -65,8 +65,8 @@ jobs:
           cd ./management-account-terraform-resources
           terraform plan
 
-  DeployOpsAccountResources:
-    needs: [DeployMgmtAccountResources]
+  PlanOpsAccountResources:
+    needs: [PlanMgmtAccountResources]
     runs-on: ubuntu-latest
     environment: dev
 
