@@ -486,7 +486,7 @@ resource "aws_cloudwatch_event_rule" "billing_reports_monthly_rule" {
   name                = "${local.app_name}-monthly-rule"
   description         = "Execute the ${local.app_name} at noon on the first day every month" // Note: 1900 UTC is 1200 PST
   schedule_expression = "cron(0 19 1 * ? *)"
-  is_enabled          = true
+  is_enabled          = false
 }
 
 resource "aws_cloudwatch_event_target" "billing_reports_monthly_target" {
