@@ -24,7 +24,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v2
         with:
           role-to-assume: ${{ secrets.MGMT_TFRB_ROLE_TO_ASSUME }}
           role-session-name: GitHubOidcBillingUtilitySession
@@ -78,7 +78,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v2
         with:
           role-to-assume: ${{ secrets.OPS_TFRB_ROLE_TO_ASSUME }}
           role-session-name: GitHubOidcBillingUtilitySession
