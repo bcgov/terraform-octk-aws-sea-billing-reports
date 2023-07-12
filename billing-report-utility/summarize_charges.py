@@ -24,13 +24,15 @@ grouping_columns = [
     "Project",
     "License_Plate",
     "Environment",
-    "Account_Coding",
     "Billing_Group",
     "Owner_Name",
     "Owner_Email",
     "line_item_product_code",
     "product_product_name",
 ]
+
+if os.environ.get("GROUP_TYPE") == "account_coding":
+    grouping_columns.append("Account_Coding")
 
 
 def read_file_into_dataframe(local_file, accounts):
@@ -134,7 +136,7 @@ def enhance_with_metadata(df, accounts):
             return f"Missing Account: {account_id}"
 
     df["Account_Coding"] = df["line_item_usage_account_id"].apply(
-        lambda x: get_account_metadata[x].get("account_coding")
+        lambda x: get_account_metadata(x, "account_coding")
     )
     df["Billing_Group"] = df["line_item_usage_account_id"].apply(
         lambda x: get_account_metadata(x, "billing_group")

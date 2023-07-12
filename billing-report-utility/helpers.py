@@ -114,7 +114,11 @@ def query_org_accounts():
 
             account_details.update(transposed_tags)
 
-            if not transposed_tags.get("billing_group", None) or not transposed_tags.get("account_coding", None):
+            billing_group_missing = not transposed_tags.get("billing_group")
+            account_coding_missing = not transposed_tags.get("account_coding")
+            group_type_account_coding = os.environ.get("GROUP_TYPE") == "account_coding"
+
+            if billing_group_missing or (account_coding_missing and group_type_account_coding):
                 logger.debug(
                     f"Account '{account_details['id']}' missing metadata tags; applying defaults."
                 )
