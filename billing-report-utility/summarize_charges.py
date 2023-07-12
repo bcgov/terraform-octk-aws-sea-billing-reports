@@ -31,6 +31,9 @@ grouping_columns = [
     "product_product_name",
 ]
 
+if os.environ.get("GROUP_TYPE") == "account_coding":
+    grouping_columns.append("Account_Coding")
+
 
 def read_file_into_dataframe(local_file, accounts):
     conver_dict = {"line_item_usage_account_id": str}
@@ -44,15 +47,14 @@ def read_file_into_dataframe(local_file, accounts):
 
 def get_exchange_rate():
     # usd_to_cad_rate= 1
-    AWS_REGION="ca-central-1"
+    AWS_REGION = "ca-central-1"
     ssm_client = boto3.client("ssm", region_name=AWS_REGION)
     url = "https://api.exchangerate.host/convert?from=USD&to=CAD"
 
     rc_channel = ssm_client.get_parameter(Name='/bcgov/billingutility/rocketchat_alert_webhook', WithDecryption=True)
-    rc_channel_url=rc_channel['Parameter']['Value']
+    rc_channel_url = rc_channel['Parameter']['Value']
     teams_channel = ssm_client.get_parameter(Name='/bcgov/billingutility/teams_alert_webhook', WithDecryption=True)
-    teams_channel_url=teams_channel['Parameter']['Value']
-
+    teams_channel_url = teams_channel['Parameter']['Value']
 
     requests_session = requests.Session()
     retries = Retry(
@@ -64,7 +66,7 @@ def get_exchange_rate():
 
     try:
         logger.info(
-    f"requesting conversion rate from{url}"
+            f"requesting conversion rate from{url}"
         )
         response = requests_session.get(url)
         # print(response.text) # process response
@@ -81,27 +83,27 @@ def get_exchange_rate():
             "text": "Billing report utility failed with error",
             "attachments": attachment,
         }
-        teamsMessage= {
-    "type":"message",
-    "attachments":[
-        {
-            "contentType":"application/vnd.microsoft.card.adaptive",
-            "contentUrl":None,
-            "content":{
-                "$schema":"http://adaptivecards.io/schemas/adaptive-card.json",
-                "type":"AdaptiveCard",
-                "version":"1.2",
-                "body":[
-                    {
-                    "type": "TextBlock",
-                    "wrap": True,
-                    "text": f"The Billing utility failed due to {error}",
+        teamsMessage = {
+            "type": "message",
+            "attachments": [
+                {
+                    "contentType": "application/vnd.microsoft.card.adaptive",
+                    "contentUrl": None,
+                    "content": {
+                        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                        "type": "AdaptiveCard",
+                        "version": "1.2",
+                        "body": [
+                            {
+                                "type": "TextBlock",
+                                "wrap": True,
+                                "text": f"The Billing utility failed due to {error}",
+                            }
+                        ]
                     }
-                ]
-            }
+                }
+            ]
         }
-    ]
-    }
         requests.post(
             rc_channel_url,
             data=json.dumps(rocketChatMessage),
@@ -133,6 +135,9 @@ def enhance_with_metadata(df, accounts):
         else:
             return f"Missing Account: {account_id}"
 
+    df["Account_Coding"] = df["line_item_usage_account_id"].apply(
+        lambda x: get_account_metadata(x, "account_coding")
+    )
     df["Billing_Group"] = df["line_item_usage_account_id"].apply(
         lambda x: get_account_metadata(x, "billing_group")
     )
@@ -157,7 +162,6 @@ def enhance_with_metadata(df, accounts):
     df["CAD"] = df["line_item_blended_cost"].apply(lambda x: x * exchange_rate)
 
 
-
 def make_account_by_id_lookup(accounts):
     team_details_by_account_id = {}
 
@@ -178,20 +182,24 @@ def report(
 
     df = read_file_into_dataframe(query_results_file, accounts)
 
-    billing_groups = set([account["billing_group"] for account in accounts])
+    if os.environ.get("GROUP_TYPE") == "account_coding":
+        billing_groups = set([account["account_coding"] for account in accounts])
+    else:
+        billing_groups = set([account["billing_group"] for account in accounts])
 
     # Total CAD for each billing group
     billing_group_totals = {}
 
     for billing_group in billing_groups:
-        billing_temp = df.query(f'(Billing_Group == "{billing_group}")')
+        group_type = "Account_Coding" if os.environ.get("GROUP_TYPE") == "account_coding" else "Billing_Group"
+        group_df = df.query(f'({group_type} == "{billing_group}")')
 
-        sum_all_columns = billing_temp.sum(axis=0, skipna=True, numeric_only=True)
+        sum_all_columns = group_df.sum(axis=0, skipna=True, numeric_only=True)
         sum_cad = sum_all_columns["CAD"]
         billing_group_totals[billing_group] = round(sum_cad, 2)
 
         billing = pd.pivot_table(
-            billing_temp,
+            group_df,
             index=grouping_columns,
             values=["line_item_blended_cost", "CAD"],
             aggfunc=[np.sum],
@@ -225,7 +233,8 @@ def report(
         cb(billing_group, report_file_name)
 
     if quarterly_report_config:
-        report_file_name = f"{report_output_path}/quarterly_report-{quarterly_report_config['year']}-q_{quarterly_report_config['quarter']}.xlsx"
+        format_string = "%Y-%m-%d"
+        report_file_name = f"{report_output_path}/quarterly_report-{date.strftime(query_parameters['start_date'], format_string)}-{date.strftime(query_parameters['end_date'], format_string)}.xlsx"
         create_quarterly_excel(billing_group_totals, report_file_name)
 
         # invoke callback to pass back generated file to caller for current billing group
@@ -242,10 +251,12 @@ def aggregate(query_results_file, summary_output_path, accounts, query_parameter
 
     create_excel(df, f"{summary_output_path}/charges-{filename_prefix}-ALL.xlsx")
 
-    billing_groups = set([account["billing_group"] for account in accounts])
+    group_type = "account_coding" if os.environ.get("GROUP_TYPE") == "account_coding" else "billing_group"
+    billing_groups = set([account[group_type] for account in accounts])
 
     for billing_group in billing_groups:
-        group_df = df.query(f'Billing_Group == "{billing_group}"')
+        group_type = "Account_Coding" if os.environ.get("GROUP_TYPE") == "account_coding" else "Billing_Group"
+        group_df = df.query(f'({group_type} == "{billing_group}")')
 
         excel_output_path = (
             f"{summary_output_path}/charges-{filename_prefix}-{billing_group}.xlsx"
