@@ -423,6 +423,10 @@ resource "aws_cloudwatch_event_target" "billing_reports_weekly_target" {
           "value" = "Weekly"
         },
         {
+          "name"  = "GROUP_TYPE",
+          "value" = "billing_group"
+        },
+        {
           "name"  = "DELIVER", # for manual runs/ testing
           "value" = "True"
         },
@@ -482,7 +486,7 @@ resource "aws_cloudwatch_event_rule" "billing_reports_monthly_rule" {
   name                = "${local.app_name}-monthly-rule"
   description         = "Execute the ${local.app_name} at noon on the first day every month" // Note: 1900 UTC is 1200 PST
   schedule_expression = "cron(0 19 1 * ? *)"
-  is_enabled          = true
+  is_enabled          = false
 }
 
 resource "aws_cloudwatch_event_target" "billing_reports_monthly_target" {
@@ -498,6 +502,10 @@ resource "aws_cloudwatch_event_target" "billing_reports_monthly_target" {
         {
           "name"  = "REPORT_TYPE",
           "value" = "Monthly"
+        },
+        {
+          "name"  = "GROUP_TYPE",
+          "value" = "billing_group"
         },
         {
           "name"  = "DELIVER", # for manual runs/ testing
@@ -577,6 +585,10 @@ resource "aws_cloudwatch_event_target" "billing_reports_quarterly_target" {
           "value" = "Quarterly"
         },
         {
+          "name"  = "GROUP_TYPE",
+          "value" = "account_coding"
+        },
+        {
           "name"  = "DELIVER", # for manual runs/ testing
           "value" = "True"
         },
@@ -633,20 +645,21 @@ resource "aws_cloudwatch_event_target" "billing_reports_quarterly_target" {
 }
 
 resource "aws_ssm_parameter" "manual_run_environment_variables" {
-  name = "/bcgov/billingutility/manual_run/env_vars"
-  type = "SecureString"
-  value = jsonencode({
-    "export REPORT_TYPE" : "Manual",
-    "export START_DATE" : "",
-    "export END_DATE" : "",
-    "export DELIVER" : "False",
-    "export RECIPIENT_OVERRIDE" : "your.email@here.ca",
-    "export CARBON_COPY" : "",
-    "export ATHENA_QUERY_ROLE_TO_ASSUME_ARN" : "arn:aws:iam::${var.lz_mgmt_account_id}:role/BCGov-Athena-Cost-and-Usage-Report",
-    "export ATHENA_QUERY_DATABASE" : "cost_and_usage_report_athena_db"
-    "export QUERY_ORG_ACCOUNTS_ROLE_TO_ASSUME_ARN" : "arn:aws:iam::${var.lz_mgmt_account_id}:role/BCGov-Query-Org-Accounts",
-    "export ATHENA_QUERY_OUTPUT_BUCKET" : "bcgov-ecf-billing-reports-output-${var.lz_mgmt_account_id}-ca-central-1",
-    "export ATHENA_QUERY_OUTPUT_BUCKET_ARN" : "arn:aws:s3:::bcgov-ecf-billing-reports-output-${var.lz_mgmt_account_id}-ca-central-1",
-    "export CMK_SSE_KMS_ALIAS" : "arn:aws:kms:ca-central-1:${var.lz_mgmt_account_id}:alias/BCGov-BillingReports"
-  })
+  name  = "/bcgov/billingutility/manual_run/env_vars"
+  type  = "SecureString"
+  value = <<EOT
+    export REPORT_TYPE="Manual"
+    export GROUP_TYPE="billing_group"
+    export START_DATE=""
+    export END_DATE=""
+    export DELIVER="False"
+    export RECIPIENT_OVERRIDE="your.email@here.ca"
+    export CARBON_COPY=""
+    export ATHENA_QUERY_ROLE_TO_ASSUME_ARN="arn:aws:iam::${var.lz_mgmt_account_id}:role/BCGov-Athena-Cost-and-Usage-Report"
+    export ATHENA_QUERY_DATABASE="cost_and_usage_report_athena_db
+    export QUERY_ORG_ACCOUNTS_ROLE_TO_ASSUME_ARN="arn:aws:iam::${var.lz_mgmt_account_id}:role/BCGov-Query-Org-Accounts"
+    export ATHENA_QUERY_OUTPUT_BUCKET="bcgov-ecf-billing-reports-output-${var.lz_mgmt_account_id}-ca-central-1"
+    export ATHENA_QUERY_OUTPUT_BUCKET_ARN="arn:aws:s3:::bcgov-ecf-billing-reports-output-${var.lz_mgmt_account_id}-ca-central-1"
+    export CMK_SSE_KMS_ALIAS="arn:aws:kms:ca-central-1:${var.lz_mgmt_account_id}:alias/BCGov-BillingReports"
+  EOT
 }
