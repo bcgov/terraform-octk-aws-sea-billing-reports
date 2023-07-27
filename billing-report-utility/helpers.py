@@ -149,7 +149,7 @@ def send_email(
     destinations = [d for d in [recipient, cc, bcc] if d is not None]
 
     # Set message body
-    body = MIMEText(body_text, "plain")
+    body = MIMEText(body_text, "html")
     msg.attach(body)
 
     if attachments:

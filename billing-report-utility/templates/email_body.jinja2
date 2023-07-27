@@ -1,14 +1,52 @@
-Hello {{billing_group_email}},
+<!doctype html>
+<html lang="en">
+<head>
+    <title>Cloud Pathfinder Team Billing Report</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            color: #333;
+        }
 
-Please find attached your billing report for the period {{ start_date.strftime('%Y-%m-%d') }} to {{ end_date.strftime('%Y-%m-%d') }}, Starting at $0 CAD on {{ start_date.strftime('%Y-%m-%d') }} to ${{billing_group_total}} on {{ end_date.strftime('%Y-%m-%d') }}.
+        .content {
+            padding: 20px;
+        }
 
-Total Charges: ${{billing_group_total}} CAD
+        h2, h3 {
+            color: #444;
+        }
 
-Note: Total charges also include the baseline costs for running the Secure Environment Accelerator guardrail and logging services within each account. You will see service charges from CloudTrail, CloudWatch, Systems Manager, Secrets Manager, S3, Simple Queue Service, Simple Notification Service, AWS Config, Elastic Load Balancing, GuardDuty, Key Management Service, Lambda, Macie, Security Hub, NAT gateway. If your team has a SandBox account workload environment, you will see EC2 charges due to the independent direct networking. We will will be migrating teams away from SandBoxes to more protected workload environments better aligned to the guardrails.
+        p {
+            line-height: 1.5;
+        }
 
-Projects:
-{{list_of_accounts}}
+        .highlight {
+            color: #0080ff;
+        }
+    </style>
+</head>
+<body>
+    <div class="content">
+        <h2>Hello {{billing_group_email}},</h2>
 
-Regards,
+        <p>Please find attached your billing report for the period 
+            <span class="highlight">{{ start_date.strftime('%Y-%m-%d') }}</span> to 
+            <span class="highlight">{{ end_date.strftime('%Y-%m-%d') }}</span>, Starting at $0 CAD on 
+            <span class="highlight">{{ start_date.strftime('%Y-%m-%d') }}</span> to $<span class="highlight">{{billing_group_total}}</span> on 
+            <span class="highlight">{{ end_date.strftime('%Y-%m-%d') }}</span>.
+        </p>
 
-The Cloud Pathfinder Team
+        <h3>Total Charges: ${{billing_group_total}} CAD</h3>
+
+        <p>Note: Total charges also include the baseline costs for running the Secure Environment Accelerator guardrail and logging services within each account. You will see service charges from CloudTrail, CloudWatch, Systems Manager, Secrets Manager, S3, Simple Queue Service, Simple Notification Service, AWS Config, Elastic Load Balancing, GuardDuty, Key Management Service, Lambda, Macie, Security Hub, NAT gateway. If your team has a SandBox account workload environment, you will see EC2 charges due to the independent direct networking. We will be migrating teams away from SandBoxes to more protected workload environments better aligned to the guardrails.</p>
+
+        <h2>Projects:</h2>
+        <p>{{list_of_accounts}}</p>
+
+        <p>Regards,</p>
+        <p>The Cloud Pathfinder Team</p>
+    </div>
+</body>
+</html>
