@@ -92,7 +92,7 @@ class BillingManager:
         project_set_lookup = self.create_project_set_lookup()
         for project_set in project_set_lookup:
             if project_set_lookup[project_set][0]["billing_group"] == billing_group:
-                formatted_account_info += "\n" + self.format_project_set_info(
+                formatted_account_info += "<br>" + self.format_project_set_info(
                     project_set_lookup[project_set]
                 )
         return formatted_account_info
