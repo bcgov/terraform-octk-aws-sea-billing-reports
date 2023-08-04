@@ -1,5 +1,5 @@
 module "management-account" {
-  source                            = "./management-account"
+  source                            = "./terraform/management-account"
   ops_account_id                    = var.ops_account_id
   mgmt_account_phase1_bucket_suffix = var.mgmt_account_phase1_bucket_suffix
 
@@ -9,7 +9,7 @@ module "management-account" {
 }
 
 module "operations-account" {
-  source             = "./operations-account"
+  source             = "./terraform/operations-account"
   lz_mgmt_account_id = var.mgmt_account_id
 
   providers = {

@@ -94,13 +94,16 @@ resource "null_resource" "docker_build" {
   }
 
   provisioner "local-exec" {
-    command = <<-EOT
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
+      assume_org_role=$(aws sts assume-role --role-arn arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/AWSCloudFormationStackSetExecutionRole --role-session-name AWSCLI-Session)
+      echo -e "[profile org_role]\naws_access_key_id = $(echo $assume_org_role | jq -r .Credentials.AccessKeyId)\naws_secret_access_key = $(echo $assume_org_role | jq -r .Credentials.SecretAccessKey)\naws_session_token = $(echo $assume_org_role | jq -r .Credentials.SessionToken)" > aws_credentials
       export DOCKER_BUILDKIT=0
       export COMPOSE_DOCKER_CLI_BUILD=0
-      aws ecr get-login-password --region ${data.aws_region.current.name} | docker login \
+      AWS_CONFIG_FILE="./aws_credentials" aws ecr get-login-password --region ${data.aws_region.current.name} --profile org_role | docker login \
         --username AWS \
         --password-stdin ${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com
-      docker build -t ${local.app_name}-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name} -f ../../Dockerfile ../../
+      docker build -t ${local.app_name}-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name} -f Dockerfile .
       docker tag ${local.app_name}-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}:latest ${aws_ecr_repository.billing_reports_ecr.repository_url}:latest
       docker push ${aws_ecr_repository.billing_reports_ecr.repository_url}:latest
     EOT
