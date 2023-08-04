@@ -15,4 +15,6 @@ module "operations-account" {
   providers = {
     aws = aws.Operations-account
   }
+
+  depends_on = [module.management-account]
 }
