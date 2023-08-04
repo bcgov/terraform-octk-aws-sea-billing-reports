@@ -2,7 +2,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 3.70.0"
+      version = ">= 3.70.0"
     }
     archive = {
       source  = "hashicorp/archive"
@@ -11,12 +11,6 @@ terraform {
   }
 
   required_version = "~> 1.0"
-
-  backend "s3" {}
-}
-
-provider "aws" {
-  region = var.aws_region
 }
 
 data "aws_caller_identity" "current" {}

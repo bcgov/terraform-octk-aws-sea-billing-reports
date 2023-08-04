@@ -2,10 +2,6 @@ terraform {
   required_providers {
     aws = {
       source = "hashicorp/aws"
-      // Moved from 3.48.0 to 3.70 due to runtime_platform bug file
-      // https://github.com/hashicorp/terraform-provider-aws/issues/22153
-      // https://github.com/hashicorp/terraform-provider-aws/blob/v3.70.0/CHANGELOG.md
-      version = "~> 3.70.0"
     }
     archive = {
       source  = "hashicorp/archive"
@@ -14,12 +10,6 @@ terraform {
   }
 
   required_version = "~> 1.0"
-
-  backend "s3" {}
-}
-
-provider "aws" {
-  region = var.aws_region
 }
 
 data "aws_caller_identity" "current" {}
@@ -110,7 +100,7 @@ resource "null_resource" "docker_build" {
       aws ecr get-login-password --region ${data.aws_region.current.name} | docker login \
         --username AWS \
         --password-stdin ${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com
-      docker build -t ${local.app_name}-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name} -f ../Dockerfile ../
+      docker build -t ${local.app_name}-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name} -f ../../Dockerfile ../../
       docker tag ${local.app_name}-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}:latest ${aws_ecr_repository.billing_reports_ecr.repository_url}:latest
       docker push ${aws_ecr_repository.billing_reports_ecr.repository_url}:latest
     EOT
