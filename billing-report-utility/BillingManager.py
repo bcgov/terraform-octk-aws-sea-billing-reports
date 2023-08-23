@@ -80,11 +80,11 @@ class BillingManager:
 
     @staticmethod
     def format_project_set_info(project_set):
-        formatted_project_set = project_set[0]["Project"] + "\n"
+        formatted_project_set = project_set[0]["Project"] + "<br>"
         for account in project_set:
             # NOTE: "name" is the same as "license_plate"-"Environment"
             formatted_project_set += (
-                "  - " + account["id"] + " - " + account["name"] + "\n"
+                "  - " + account["id"] + " - " + account["name"] + "<br>"
             )
         return formatted_project_set
 
