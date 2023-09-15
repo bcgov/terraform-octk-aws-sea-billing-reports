@@ -147,6 +147,9 @@ def enhance_with_metadata(df, accounts):
     df["Owner_Email"] = df["line_item_usage_account_id"].apply(
         lambda x: get_account_metadata(x, "admin_contact_email")
     )
+    df["Additional_Contacts"] = df["line_item_usage_account_id"].apply(
+    lambda x: get_account_metadata(x, "additional_contacts")
+    )
     df["Project"] = df["line_item_usage_account_id"].apply(
         lambda x: get_account_metadata(x, "Project")
     )

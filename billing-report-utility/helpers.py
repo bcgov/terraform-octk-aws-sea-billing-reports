@@ -144,14 +144,16 @@ def send_email(
     msg["From"] = sender
     msg["To"] = recipient
 
+    destinations = [recipient]
     if cc:
+        cc_list = cc.split(',')
+        destinations.extend(cc_list)
         msg["CC"] = cc
 
     if bcc:
+        destinations.append(bcc)
         msg["BCC"] = bcc
 
-    # later we will need to set all destinations. here we quickly make that list
-    destinations = [d for d in [recipient, cc, bcc] if d is not None]
 
     # Set message body
     body = MIMEText(body_text, "html")
