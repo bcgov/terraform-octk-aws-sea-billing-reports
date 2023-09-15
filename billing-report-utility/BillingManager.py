@@ -63,10 +63,13 @@ class BillingManager:
         # for a given billing group
         group_type = "account_coding" if os.environ.get("GROUP_TYPE") == "account_coding" else "billing_group"
         self.emails_for_billing_groups = defaultdict(set)
+        self.additional_contacts_for_billing_groups = defaultdict(list)
         for account in self.org_accounts:
-            self.emails_for_billing_groups[account[group_type]].add(
-                account["admin_contact_email"]
-            )
+            self.emails_for_billing_groups[account[group_type]].add(account["admin_contact_email"])
+
+            additional_contacts = account.get("additional_contacts", "").split("/")
+            self.additional_contacts_for_billing_groups[account[group_type]] = list(set(self.additional_contacts_for_billing_groups[account[group_type]]).union(set(additional_contacts)))
+
 
     def create_project_set_lookup(self):
         project_set_lookup = {}
@@ -100,7 +103,6 @@ class BillingManager:
 
     def __deliver_reports(self, billing_group_totals):
         logger.info("Delivering Cloud Consumption Reports...")
-
         if os.environ.get("REPORT_TYPE") == "Quarterly":
             recipient_email = self.query_parameters.get("recipient_override")
             carbon_copy = self.query_parameters.get("carbon_copy")
@@ -116,7 +118,7 @@ class BillingManager:
                 f"{self.query_parameters['end_date'].strftime('%d-%m-%Y')}."
             )
             attachment = self.delivery_outbox.get("QUARTERLY_REPORT")
-
+            print(f"Sending email to '{recipient_email}' and CC to '{cc_email_address}' with subject '{subject}'")
             logger.debug(f"Sending email to '{recipient_email}' and CC to '{cc_email_address}' with subject '{subject}'")
 
             email_result = send_email(sender="info@cloud.gov.bc.ca",
@@ -132,12 +134,27 @@ class BillingManager:
                 override_email_address = self.query_parameters.get("recipient_override")
                 if override_email_address and override_email_address != "":
                     recipient_email = override_email_address
+                    # Since we have recepient override, we do not want to send emails to additional contacts
+                    additional_contacts = []
                 else:
                     billing_group_email = self.emails_for_billing_groups.get(
                         billing_group
                     ).pop()
-
                     recipient_email = billing_group_email
+
+                    # Get Additioanl contacts for each Billing Group 
+                    additional_contacts = self.additional_contacts_for_billing_groups[billing_group]
+                    additional_contacts = [email for email in additional_contacts if email.strip() != ""]
+
+                #Get Carbon copy
+                carbon_copy = self.query_parameters.get("carbon_copy")
+
+                # Append carbon copy value to additional contacts
+                if carbon_copy and carbon_copy.strip() != "":
+                    additional_contacts.append(carbon_copy.lower())
+                cc_email_address = ",".join(additional_contacts) if additional_contacts else None
+                   
+
 
                 subject = (
                     f"Cloud Consumption Report ${billing_group_totals.get(billing_group)} for "
@@ -156,10 +173,8 @@ class BillingManager:
                         ),
                     }
                 )
-
-                carbon_copy = self.query_parameters.get("carbon_copy")
-                cc_email_address = carbon_copy if carbon_copy and carbon_copy != "" else None
-
+                print(f"Sending email to '{recipient_email}' and CC to '{cc_email_address}' with subject '{subject}'")
+            
                 logger.debug(f"Sending email to '{recipient_email}' and CC to '{cc_email_address}' with subject '{subject}'")
 
                 email_result = send_email(
