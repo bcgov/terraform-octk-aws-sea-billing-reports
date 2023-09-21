@@ -591,7 +591,7 @@ resource "aws_cloudwatch_event_target" "billing_reports_quarterly_target" {
         },
         {
           "name"  = "CARBON_COPY",
-          "value" = ""
+          "value" = "Rosemarie.Segura@gov.bc.ca"
         },
         {
           "name"  = "ATHENA_QUERY_OUTPUT_BUCKET",

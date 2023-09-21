@@ -277,8 +277,13 @@ def create_quarterly_excel(billing_group_totals, quarterly_output_file):
     ws["A1"] = "Billing Group"
     ws["B1"] = "Total Spend (CAD)"
 
+    # NOTE: in this case billing_group = account_coding because for quarterly reports GROUP_TYPE = account_coding
     for billing_group, total in billing_group_totals.items():
-        row = (billing_group, total)
+        
+        if billing_group == "000000000000000000000000":
+            row = ("CPF. Pay direct via Service Order. No JV needed.", total)
+        else:           
+            row = (billing_group, total)
         ws.append(row)
 
     wb.save(f"{quarterly_output_file}")
