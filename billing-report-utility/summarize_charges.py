@@ -49,7 +49,7 @@ def get_exchange_rate():
     # usd_to_cad_rate= 1
     AWS_REGION = "ca-central-1"
     ssm_client = boto3.client("ssm", region_name=AWS_REGION)
-    url = "https://api.exchangerate.host/convert?from=USD&to=CAD"
+    url = "https://www.bankofcanada.ca/valet/observations/FXUSDCAD?recent=1"
 
     rc_channel = ssm_client.get_parameter(Name='/bcgov/billingutility/rocketchat_alert_webhook', WithDecryption=True)
     rc_channel_url = rc_channel['Parameter']['Value']
@@ -60,7 +60,7 @@ def get_exchange_rate():
     retries = Retry(
         total=3,
         backoff_factor=1,
-        status_forcelist=[429, 500, 502, 503, 504]
+        status_forcelist=[429, 500, 502, 503, 504, 404]
     )
     requests_session.mount("https://", HTTPAdapter(max_retries=retries))
 
@@ -118,7 +118,7 @@ def get_exchange_rate():
         )
     else:
         data = response.json()
-        usd_to_cad_rate = float(data["result"])
+        usd_to_cad_rate = float(data['observations'][0]['FXUSDCAD']['v'])
         # print(usd_to_cad_rate)
     return usd_to_cad_rate
 
