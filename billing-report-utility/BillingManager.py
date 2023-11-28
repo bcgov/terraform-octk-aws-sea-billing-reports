@@ -63,13 +63,22 @@ class BillingManager:
         # for a given billing group
         group_type = "account_coding" if os.environ.get("GROUP_TYPE") == "account_coding" else "billing_group"
         self.emails_for_billing_groups = defaultdict(set)
+        self.names_for_billing_groups = defaultdict(set)
         self.additional_contacts_for_billing_groups = defaultdict(list)
         for account in self.org_accounts:
             self.emails_for_billing_groups[account[group_type]].add(account["admin_contact_email"])
-
             additional_contacts = account.get("additional_contacts", "").split("/")
             self.additional_contacts_for_billing_groups[account[group_type]] = list(set(self.additional_contacts_for_billing_groups[account[group_type]]).union(set(additional_contacts)))
-
+            admin_contact_name = account.get("admin_contact_name", "Unnamed")  # Unnamed is the default value
+            self.names_for_billing_groups[account[group_type]].add(admin_contact_name)
+    @staticmethod
+    def extract_name_from_email(email_address):
+        #p.m@gov.bc.ca P M
+        # Assuming email_address is a string like 'firstname.lastname@domain'
+        name_part = email_address.split('@')[0]  # Split the email by '@' and take the first part
+        name_parts = name_part.split('.')  # Split the name part by '.'
+        capitalized_name_parts = [part.capitalize() for part in name_parts]  # Capitalize each part
+        return ' '.join(capitalized_name_parts)  # Join the parts into a full name string
 
     def create_project_set_lookup(self):
         project_set_lookup = {}
@@ -105,6 +114,7 @@ class BillingManager:
         logger.info("Delivering Cloud Consumption Reports...")
         if os.environ.get("REPORT_TYPE") == "Quarterly":
             recipient_email = self.query_parameters.get("recipient_override")
+            recipient_name = self.extract_name_from_email(recipient_email.strip())
             carbon_copy = self.query_parameters.get("carbon_copy")
             cc_email_address = carbon_copy if carbon_copy and carbon_copy != "" else None
             subject = (
@@ -134,6 +144,7 @@ class BillingManager:
                 override_email_address = self.query_parameters.get("recipient_override")
                 if override_email_address and override_email_address != "":
                     recipient_email = override_email_address
+                    recipient_name = self.extract_name_from_email(override_email_address.strip())
                     # Since we have recepient override, we do not want to send emails to additional contacts
                     additional_contacts = []
                 else:
@@ -142,6 +153,7 @@ class BillingManager:
                     ).pop()
                     recipient_email = billing_group_email
 
+                    recipient_name = self.names_for_billing_groups[billing_group].pop()
                     # Get Additioanl contacts for each Billing Group 
                     additional_contacts = self.additional_contacts_for_billing_groups[billing_group]
                     additional_contacts = [email for email in additional_contacts if email.strip() != ""]
@@ -157,14 +169,16 @@ class BillingManager:
 
 
                 subject = (
-                    f"Cloud Consumption Report ${billing_group_totals.get(billing_group)} for "
-                    f"{self.query_parameters['start_date'].strftime('%d-%m-%Y')} to "
+                    f"Cloud Consumption Report for {billing_group} - "
+                    f"${billing_group_totals.get(billing_group)} "
+                    f"from {self.query_parameters['start_date'].strftime('%d-%m-%Y')} to "
                     f"{self.query_parameters['end_date'].strftime('%d-%m-%Y')}."
                 )
 
                 body_text = jinja_template.render(
                     {
                         "billing_group_email": recipient_email,
+                        "admin_name":recipient_name,
                         "start_date": self.query_parameters.get("start_date"),
                         "end_date": self.query_parameters.get("end_date"),
                         "billing_group_total": billing_group_totals.get(billing_group),
