@@ -304,8 +304,8 @@ resource "aws_ecs_task_definition" "billing_reports_ecs_task" {
   family                   = "${local.app_name}-ecs-task"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = "8192" # This needs to be high for the quarterly billing report to run to completion
-  memory                   = "32768" # This needs to be high for the quarterly billing report to run to completion
+  cpu                      = "8192"   # This needs to be high for the quarterly billing report to run to completion
+  memory                   = "32768"  # This needs to be high for the quarterly billing report to run to completion
   execution_role_arn       = aws_iam_role.ecs_task_exec_role.arn
   task_role_arn            = aws_iam_role.ecs_task_role.arn
   runtime_platform {
