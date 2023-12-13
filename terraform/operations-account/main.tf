@@ -306,12 +306,12 @@ resource "aws_cloudwatch_event_rule" "ecs_task_state_change" {
   description = "Triggers on ECS task state changes from RUNNING to STOPPED for ${local.app_name}-cluster"
 
   event_pattern = jsonencode({
-    source: ["aws.ecs"],
-    "detail-type": ["ECS Task State Change"],
-    detail: {
-      clusterArn: [aws_ecs_cluster.billing_reports_ecs_cluster.arn],
-      lastStatus: ["STOPPED"],
-      desiredStatus: ["STOPPED"]
+    source : ["aws.ecs"],
+    "detail-type" : ["ECS Task State Change"],
+    detail : {
+      clusterArn : [aws_ecs_cluster.billing_reports_ecs_cluster.arn],
+      lastStatus : ["STOPPED"],
+      desiredStatus : ["STOPPED"]
     }
   })
 }
@@ -341,7 +341,7 @@ resource "aws_ecs_task_definition" "billing_reports_ecs_task" {
   task_role_arn            = aws_iam_role.ecs_task_role.arn
   runtime_platform {
     operating_system_family = "LINUX"
-      # cpu_architecture        = "ARM64" // Used when testing deployment from Local ARM64 based device
+    # cpu_architecture        = "ARM64" // Used when testing deployment from Local ARM64 based device
   }
   container_definitions = jsonencode([{
     name       = "${local.app_name}-ecs-container-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}"
