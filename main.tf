@@ -11,6 +11,8 @@ module "management-account" {
 module "operations-account" {
   source             = "./terraform/operations-account"
   lz_mgmt_account_id = var.mgmt_account_id
+  lambda_arn = var.lambda_arn
+  lambda_function_name= var.lambda_function_name
 
   providers = {
     aws = aws.Operations-account
