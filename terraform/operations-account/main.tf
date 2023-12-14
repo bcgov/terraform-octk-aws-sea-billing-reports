@@ -680,7 +680,7 @@ resource "aws_ssm_parameter" "manual_run_environment_variables" {
     export RECIPIENT_OVERRIDE="your.email@here.ca"
     export CARBON_COPY=""
     export ATHENA_QUERY_ROLE_TO_ASSUME_ARN="arn:aws:iam::${var.lz_mgmt_account_id}:role/BCGov-Athena-Cost-and-Usage-Report"
-    export ATHENA_QUERY_DATABASE="cost_and_usage_report_athena_db
+    export ATHENA_QUERY_DATABASE="cost_and_usage_report_athena_db"
     export QUERY_ORG_ACCOUNTS_ROLE_TO_ASSUME_ARN="arn:aws:iam::${var.lz_mgmt_account_id}:role/BCGov-Query-Org-Accounts"
     export ATHENA_QUERY_OUTPUT_BUCKET="bcgov-ecf-billing-reports-output-${var.lz_mgmt_account_id}-ca-central-1"
     export ATHENA_QUERY_OUTPUT_BUCKET_ARN="arn:aws:s3:::bcgov-ecf-billing-reports-output-${var.lz_mgmt_account_id}-ca-central-1"

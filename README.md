@@ -105,7 +105,7 @@ pip3 install -r requirements.txt
 
 Given SES resources are deployed in the ECF LZ operations accounts, you'd need a role in that account to execute the Python script locally. At the time of this writing, the admin role on the operator account is sufficient.
 
-> For local execution, the ECF LZ operations account role must be able to use the CMK corresponding associated with the environment variable: `CMK_SSE_KMS_ALIAS` and also assume corresponding roles associated with environment variables `QUERY_ORG_ACCOUNTS_ROLE_TO_ASSUME_ARN` and `ATHENA_QUERY_ROLE_TO_ASSUME_ARN`. These are resources deployed in the ECF LZ management account. At the time of this writing, the admin role on the operator account is sufficient. As we scale back on permissions, this will likely be revised further.  
+> For local execution, the ECF LZ operations account role must be able to use the CMK corresponding associated with the environment variable: `CMK_SSE_KMS_ALIAS` and also assume corresponding roles associated with environment variables `QUERY_ORG_ACCOUNTS_ROLE_TO_ASSUME_ARN` and `ATHENA_QUERY_ROLE_TO_ASSUME_ARN`. These are resources deployed in the ECF LZ management account. At the time of this writing, the admin role on the Operations account is sufficient. As we scale back on permissions, this will likely be revised further.  
 
 Once the appropriate values as indicated above are available, you can easily run the script using the command:
 
