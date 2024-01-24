@@ -141,6 +141,12 @@ class BillingManager:
             logger.debug(f"Email result: {email_result}.")
         else:
             for billing_group, attachments in self.delivery_outbox.items():
+                billing_group_total = billing_group_totals.get(billing_group, 0.00)
+                if billing_group_total <= 0.00:
+                    logger.info(
+                        f"Skipping email delivery for '{billing_group}' as total is $0."
+                    )
+                    continue
                 override_email_address = self.query_parameters.get("recipient_override")
                 if override_email_address and override_email_address != "":
                     recipient_email = override_email_address
@@ -170,7 +176,7 @@ class BillingManager:
 
                 subject = (
                     f"Cloud Consumption Report for {billing_group} - "
-                    f"${billing_group_totals.get(billing_group)} "
+                    f"${billing_group_total} "
                     f"from {self.query_parameters['start_date'].strftime('%d-%m-%Y')} to "
                     f"{self.query_parameters['end_date'].strftime('%d-%m-%Y')}."
                 )
@@ -181,7 +187,7 @@ class BillingManager:
                         "admin_name":recipient_name,
                         "start_date": self.query_parameters.get("start_date"),
                         "end_date": self.query_parameters.get("end_date"),
-                        "billing_group_total": billing_group_totals.get(billing_group),
+                        "billing_group_total": billing_group_total,
                         "list_of_accounts": self.format_account_info_for_email(
                             billing_group
                         ),
