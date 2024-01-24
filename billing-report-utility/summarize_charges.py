@@ -200,7 +200,7 @@ def report(
         sum_all_columns = group_df.sum(axis=0, skipna=True, numeric_only=True)
         sum_cad = sum_all_columns["CAD"]
         billing_group_totals[billing_group] = round(sum_cad, 2)
-        
+
         billing = pd.pivot_table(
             group_df,
             index=grouping_columns,
