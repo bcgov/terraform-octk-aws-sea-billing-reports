@@ -302,11 +302,12 @@ def create_quarterly_excel(billing_group_totals, accounts, quarterly_output_file
         po_names_formatted = set_to_formatted_string(po_names)
         po_emails_formatted = set_to_formatted_string(po_emails)
         
-        if billing_group == "000000000000000000000000":
-            row = ("CPF. Pay direct via Service Order. No JV needed.", total, po_names_formatted, po_emails_formatted)
-        else:           
-            row = (billing_group, total, po_names_formatted, po_emails_formatted)
-        ws.append(row)
+        if total != 0 :
+          if billing_group == "000000000000000000000000":
+              row = ("CPF. Pay direct via Service Order. No JV needed.", total, po_names_formatted, po_emails_formatted)
+          else:           
+              row = (billing_group, total, po_names_formatted, po_emails_formatted)
+          ws.append(row)
 
     wb.save(f"{quarterly_output_file}")
 
