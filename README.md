@@ -49,7 +49,7 @@ Further improvements would involve moving Glue and Athena components from the ma
   - for Mac M1 Chip rosetta is required before Docker install
     - `softwareupdate --install-rosetta`
 - Python (local/ manual runs)
-  - `brew install python`
+  - `brew install python@3.11`
 
 ## Getting Started
 

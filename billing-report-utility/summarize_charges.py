@@ -182,7 +182,7 @@ def report(
     cb,
     quarterly_report_config,
 ):
-
+    # Data frame relates account charges with account tags/ metadata which makes for easy aggregation
     df = read_file_into_dataframe(query_results_file, accounts)
 
     if os.environ.get("GROUP_TYPE") == "account_coding":
@@ -238,7 +238,7 @@ def report(
     if quarterly_report_config:
         format_string = "%Y-%m-%d"
         report_file_name = f"{report_output_path}/quarterly_report-{date.strftime(query_parameters['start_date'], format_string)}-{date.strftime(query_parameters['end_date'], format_string)}.xlsx"
-        create_quarterly_excel(billing_group_totals, report_file_name)
+        create_quarterly_excel(billing_group_totals, accounts, report_file_name)
 
         # invoke callback to pass back generated file to caller for current billing group
         cb("QUARTERLY_REPORT", report_file_name)
@@ -270,21 +270,44 @@ def aggregate(query_results_file, summary_output_path, accounts, query_parameter
         cb(billing_group, excel_output_path)
 
 
-def create_quarterly_excel(billing_group_totals, quarterly_output_file):
+def set_to_formatted_string(some_set):
+    formatted_list = ""
+    for item in some_set:
+        formatted_list = formatted_list + item + '; ' 
+    return formatted_list.rstrip('; ')
+
+def create_quarterly_excel(billing_group_totals, accounts, quarterly_output_file):
     wb = Workbook()
     ws = wb.active
 
     ws["A1"] = "Billing Group"
     ws["B1"] = "Total Spend (CAD)"
+    ws["C1"] = "PO Names"
+    ws["D1"] = "PO Emails"
 
     # NOTE: in this case billing_group = account_coding because for quarterly reports GROUP_TYPE = account_coding
     for billing_group, total in billing_group_totals.items():
+
+        # Look up all the Product Owners for all the accounts with this account coding
+        related_accounts = []
+
+        for account in accounts :
+          if account["account_coding"] == billing_group :
+              related_accounts.append(account)
+
+        # Create a duplicate-free list of all PO's associated with these accounts
+        po_names = set([account["admin_contact_name"] for account in related_accounts])
+        po_emails = set([account["admin_contact_email"] for account in related_accounts])
+
+        po_names_formatted = set_to_formatted_string(po_names)
+        po_emails_formatted = set_to_formatted_string(po_emails)
         
-        if billing_group == "000000000000000000000000":
-            row = ("CPF. Pay direct via Service Order. No JV needed.", total)
-        else:           
-            row = (billing_group, total)
-        ws.append(row)
+        if total != 0 :
+          if billing_group == "000000000000000000000000":
+              row = ("CPF. Pay direct via Service Order. No JV needed.", total, po_names_formatted, po_emails_formatted)
+          else:           
+              row = (billing_group, total, po_names_formatted, po_emails_formatted)
+          ws.append(row)
 
     wb.save(f"{quarterly_output_file}")
 
