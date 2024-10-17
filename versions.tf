@@ -4,7 +4,7 @@ terraform {
       source  = "hashicorp/aws"
       version = "~>4.0"
       configuration_aliases = [
-        aws.master-account,
+        aws.Management-account,
         aws.Operations-account
       ]
     }

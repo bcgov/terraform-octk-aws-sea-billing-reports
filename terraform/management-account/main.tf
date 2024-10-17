@@ -181,7 +181,7 @@ resource "aws_iam_policy" "athena_cost_and_usage_report_policies" {
           "s3:GetObject",
           "s3:PutObject"
         ],
-        Resource = "arn:aws:s3:::pbmmaccel-master-phase1-cacentral1-${var.mgmt_account_phase1_bucket_suffix}/${data.aws_caller_identity.current.account_id}/cur/Cost-and-Usage-Report/Cost-and-Usage-Report*"
+        Resource = "arn:aws:s3:::aws-accelerator-cur-${data.aws_caller_identity.current.account_id}-ca-central-1/cur/${data.aws_caller_identity.current.account_id}/Cost-and-Usage-Report/Cost-and-Usage-Report*"
         Effect   = "Allow"
       },
       {
@@ -245,7 +245,7 @@ resource "aws_glue_crawler" "aws_cur_crawler_cost_and_usage_report" {
   schedule      = "cron(0 * * * ? *)" // Run crawler every hour. NOTE: previously the crawler ran "on demand", I'm implemeting this hourly run so that the weekly reports wont fail until we can figure out why on demand isn't working with the new design.
 
   s3_target {
-    path = "s3://pbmmaccel-master-phase1-cacentral1-${var.mgmt_account_phase1_bucket_suffix}/${data.aws_caller_identity.current.account_id}/cur/Cost-and-Usage-Report/Cost-and-Usage-Report/"
+    path = "s3://aws-accelerator-cur-${data.aws_caller_identity.current.account_id}-ca-central-1/cur/${data.aws_caller_identity.current.account_id}/Cost-and-Usage-Report/Cost-and-Usage-Report/"
     exclusions = [
       "**.json",
       "**.yml",
@@ -287,7 +287,7 @@ resource "aws_glue_catalog_table" "cost_and_usage_report" {
   }
 
   storage_descriptor {
-    location          = "s3://pbmmaccel-master-phase1-cacentral1-${var.mgmt_account_phase1_bucket_suffix}/${data.aws_caller_identity.current.account_id}/cur/Cost-and-Usage-Report/Cost-and-Usage-Report/"
+    location          = "s3://aws-accelerator-cur-${data.aws_caller_identity.current.account_id}-ca-central-1/cur/${data.aws_caller_identity.current.account_id}/Cost-and-Usage-Report/Cost-and-Usage-Report/"
     input_format      = "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"
     output_format     = "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"
     compressed        = false
@@ -306,7 +306,7 @@ resource "aws_glue_catalog_table" "cost_and_usage_report" {
       UPDATED_BY_CRAWLER               = aws_glue_crawler.aws_cur_crawler_cost_and_usage_report.name
       classification                   = "parquet"
       compressionType                  = "none"
-      exclusions                       = "[\"s3://pbmmaccel-master-phase1-cacentral1-${var.mgmt_account_phase1_bucket_suffix}/${data.aws_caller_identity.current.account_id}/cur/Cost-and-Usage-Report/Cost-and-Usage-Report/**.json\",\"s3://pbmmaccel-master-phase1-cacentral1-${var.mgmt_account_phase1_bucket_suffix}/${data.aws_caller_identity.current.account_id}}/cur/Cost-and-Usage-Report/Cost-and-Usage-Report/**.yml\",\"s3://pbmmaccel-master-phase1-cacentral1-${var.mgmt_account_phase1_bucket_suffix}/${data.aws_caller_identity.current.account_id}}/cur/Cost-and-Usage-Report/Cost-and-Usage-Report/**.sql\",\"s3://pbmmaccel-master-phase1-cacentral1-${var.mgmt_account_phase1_bucket_suffix}/${data.aws_caller_identity.current.account_id}}/cur/Cost-and-Usage-Report/Cost-and-Usage-Report/**.csv\",\"s3://pbmmaccel-master-phase1-cacentral1-${var.mgmt_account_phase1_bucket_suffix}/${data.aws_caller_identity.current.account_id}}/cur/Cost-and-Usage-Report/Cost-and-Usage-Report/**.gz\",\"s3://pbmmaccel-master-phase1-cacentral1-${var.mgmt_account_phase1_bucket_suffix}/${data.aws_caller_identity.current.account_id}}/cur/Cost-and-Usage-Report/Cost-and-Usage-Report/**.zip\"]"
+      exclusions                       = "[\"s3://aws-accelerator-cur-${data.aws_caller_identity.current.account_id}-ca-central-1/cur/${data.aws_caller_identity.current.account_id}/Cost-and-Usage-Report/Cost-and-Usage-Report/**.json\",\"s3://aws-accelerator-cur-${data.aws_caller_identity.current.account_id}-ca-central-1/cur/${data.aws_caller_identity.current.account_id}/Cost-and-Usage-Report/Cost-and-Usage-Report/**.yml\",\"s3://aws-accelerator-cur-${data.aws_caller_identity.current.account_id}-ca-central-1/cur/${data.aws_caller_identity.current.account_id}/Cost-and-Usage-Report/Cost-and-Usage-Report/**.sql\",\"s3://aws-accelerator-cur-${data.aws_caller_identity.current.account_id}-ca-central-1/cur/${data.aws_caller_identity.current.account_id}/Cost-and-Usage-Report/Cost-and-Usage-Report/**.csv\",\"s3://aws-accelerator-cur-${data.aws_caller_identity.current.account_id}-ca-central-1/cur/${data.aws_caller_identity.current.account_id}/Cost-and-Usage-Report/Cost-and-Usage-Report/**.gz\",\"s3://aws-accelerator-cur-${data.aws_caller_identity.current.account_id}-ca-central-1/cur/${data.aws_caller_identity.current.account_id}/Cost-and-Usage-Report/Cost-and-Usage-Report/**.zip\"]"
       typeOfData                       = "file"
     }
   }
@@ -317,7 +317,7 @@ resource "aws_glue_catalog_table" "cost_and_usage_report" {
     UPDATED_BY_CRAWLER               = aws_glue_crawler.aws_cur_crawler_cost_and_usage_report.name
     classification                   = "parquet"
     compressionType                  = "none"
-    exclusions                       = "[\"s3://pbmmaccel-master-phase1-cacentral1-${var.mgmt_account_phase1_bucket_suffix}/${data.aws_caller_identity.current.account_id}}/cur/Cost-and-Usage-Report/Cost-and-Usage-Report/**.json\",\"s3://pbmmaccel-master-phase1-cacentral1-${var.mgmt_account_phase1_bucket_suffix}/${data.aws_caller_identity.current.account_id}}/cur/Cost-and-Usage-Report/Cost-and-Usage-Report/**.yml\",\"s3://pbmmaccel-master-phase1-cacentral1-${var.mgmt_account_phase1_bucket_suffix}/${data.aws_caller_identity.current.account_id}}/cur/Cost-and-Usage-Report/Cost-and-Usage-Report/**.sql\",\"s3://pbmmaccel-master-phase1-cacentral1-${var.mgmt_account_phase1_bucket_suffix}/${data.aws_caller_identity.current.account_id}}/cur/Cost-and-Usage-Report/Cost-and-Usage-Report/**.csv\",\"s3://pbmmaccel-master-phase1-cacentral1-${var.mgmt_account_phase1_bucket_suffix}/${data.aws_caller_identity.current.account_id}}/cur/Cost-and-Usage-Report/Cost-and-Usage-Report/**.gz\",\"s3://pbmmaccel-master-phase1-cacentral1-${var.mgmt_account_phase1_bucket_suffix}/${data.aws_caller_identity.current.account_id}}/cur/Cost-and-Usage-Report/Cost-and-Usage-Report/**.zip\"]"
+    exclusions                       = "[\"s3://aws-accelerator-cur-${data.aws_caller_identity.current.account_id}-ca-central-1/cur/${data.aws_caller_identity.current.account_id}/Cost-and-Usage-Report/Cost-and-Usage-Report/**.json\",\"s3://aws-accelerator-cur-${data.aws_caller_identity.current.account_id}-ca-central-1/cur/${data.aws_caller_identity.current.account_id}/Cost-and-Usage-Report/Cost-and-Usage-Report/**.yml\",\"s3://aws-accelerator-cur-${data.aws_caller_identity.current.account_id}-ca-central-1/cur/${data.aws_caller_identity.current.account_id}/Cost-and-Usage-Report/Cost-and-Usage-Report/**.sql\",\"s3://aws-accelerator-cur-${data.aws_caller_identity.current.account_id}-ca-central-1/cur/${data.aws_caller_identity.current.account_id}/Cost-and-Usage-Report/Cost-and-Usage-Report/**.csv\",\"s3://aws-accelerator-cur-${data.aws_caller_identity.current.account_id}-ca-central-1/cur/${data.aws_caller_identity.current.account_id}/Cost-and-Usage-Report/Cost-and-Usage-Report/**.gz\",\"s3://aws-accelerator-cur-${data.aws_caller_identity.current.account_id}-ca-central-1/cur/${data.aws_caller_identity.current.account_id}/Cost-and-Usage-Report/Cost-and-Usage-Report/**.zip\"]"
     typeOfData                       = "file"
   }
 

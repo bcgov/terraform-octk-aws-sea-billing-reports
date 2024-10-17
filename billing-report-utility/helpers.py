@@ -87,10 +87,10 @@ def query_org_accounts():
     page_iterator = paginator.paginate()
 
     core_billing_group_tags = {
-        "account_coding": "SEA Core",
-        "billing_group": "SEA Core",
-        "admin_contact_email": "julian.subda@gov.bc.ca",
-        "admin_contact_name": "Julian Subda",
+        "account_coding": "LZA Core",
+        "billing_group": "LZA Core",
+        "admin_contact_email": "thibault.breboin@gov.bc.ca",
+        "admin_contact_name": "Thibault Breboin",
         "Project": "Landing Zone Core",
         "Environment": "Core",
     }
