@@ -22,3 +22,7 @@ variable "lambda_function_name" {
   type        = string
 }
 
+variable "sns_topic_arn" {
+  type = string
+  description = "Arn of the SNS topic to send the alert notifications to"
+}

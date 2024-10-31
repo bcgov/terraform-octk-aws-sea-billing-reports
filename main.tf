@@ -12,6 +12,7 @@ module "operations-account" {
   lz_mgmt_account_id = var.mgmt_account_id
   lambda_arn = var.lambda_arn
   lambda_function_name= var.lambda_function_name
+  sns_topic_arn = var.sns_topic_arn
 
   providers = {
     aws = aws.Operations-account

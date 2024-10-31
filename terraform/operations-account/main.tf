@@ -687,3 +687,41 @@ resource "aws_ssm_parameter" "manual_run_environment_variables" {
     export CMK_SSE_KMS_ALIAS="arn:aws:kms:ca-central-1:${var.lz_mgmt_account_id}:alias/BCGov-BillingReports"
   EOT
 }
+
+
+# Alarm to monitor Weekly billing and quarterly billing for failed invocations
+resource "aws_cloudwatch_metric_alarm" "Weekly_billing_Rule" {
+  count               = aws_cloudwatch_event_rule.billing_reports_weekly_rule.name != null ? 1 : 0
+  alarm_name          = "Weekly billing executions"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "1"
+  metric_name         = "FailedInvocations"
+  namespace           = "AWS/Events"
+  period              = "60"
+  statistic           = "Sum"
+  threshold           = "0"
+  datapoints_to_alarm = "1"
+  alarm_description   = "Monitor weekly billing for errors"
+  alarm_actions       = [var.sns_topic_arn]
+  dimensions = {
+    RuleName = aws_cloudwatch_event_rule.billing_reports_weekly_rule.name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "quarterly_billing_Rule" {
+  count               = aws_cloudwatch_event_rule.billing_reports_quarterly_rule.name != null ? 1 : 0
+  alarm_name          = "Weekly billing executions"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "1"
+  metric_name         = "FailedInvocations"
+  namespace           = "AWS/Events"
+  period              = "60"
+  statistic           = "Sum"
+  threshold           = "0"
+  datapoints_to_alarm = "1"
+  alarm_description   = "Monitor weekly billing for errors"
+  alarm_actions       = [var.sns_topic_arn]
+  dimensions = {
+    RuleName = aws_cloudwatch_event_rule.billing_reports_quarterly_rule.name
+  }
+}
