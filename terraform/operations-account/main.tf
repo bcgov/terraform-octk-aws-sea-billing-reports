@@ -301,35 +301,35 @@ resource "aws_ecs_cluster" "billing_reports_ecs_cluster" {
 }
 
 # adding the event bridge rule failure alerts
-# resource "aws_cloudwatch_event_rule" "ecs_task_state_change" {
-#   name        = "ecs-task-state-change"
-#   description = "Triggers on ECS task state changes from RUNNING to STOPPED for ${local.app_name}-cluster"
+resource "aws_cloudwatch_event_rule" "ecs_task_state_change" {
+  name        = "ecs-task-state-change"
+  description = "Triggers on ECS task state changes from RUNNING to STOPPED for ${local.app_name}-cluster"
 
-#   event_pattern = jsonencode({
-#     source : ["aws.ecs"],
-#     "detail-type" : ["ECS Task State Change"],
-#     detail : {
-#       clusterArn : [aws_ecs_cluster.billing_reports_ecs_cluster.arn],
-#       lastStatus : ["STOPPED"],
-#       desiredStatus : ["STOPPED"]
-#     }
-#   })
-# }
+  event_pattern = jsonencode({
+    source : ["aws.ecs"],
+    "detail-type" : ["ECS Task State Change"],
+    detail : {
+      clusterArn : [aws_ecs_cluster.billing_reports_ecs_cluster.arn],
+      lastStatus : ["STOPPED"],
+      desiredStatus : ["STOPPED"]
+    }
+  })
+}
 
 
-# resource "aws_cloudwatch_event_target" "lambda_target" {
-#   rule      = aws_cloudwatch_event_rule.ecs_task_state_change.name
-#   target_id = "TargetFunctionV1"
-#   arn       = var.lambda_arn
-# }
+resource "aws_cloudwatch_event_target" "lambda_target" {
+  rule      = aws_cloudwatch_event_rule.ecs_task_state_change.name
+  target_id = "TargetFunctionV1"
+  arn       = var.lambda_arn
+}
 
-# resource "aws_lambda_permission" "allow_cloudwatch_to_call" {
-#   statement_id  = "AllowExecutionFromCloudWatch"
-#   action        = "lambda:InvokeFunction"
-#   function_name = var.lambda_function_name
-#   principal     = "events.amazonaws.com"
-#   source_arn    = aws_cloudwatch_event_rule.ecs_task_state_change.arn
-# }
+resource "aws_lambda_permission" "allow_cloudwatch_to_call" {
+  statement_id  = "AllowExecutionFromCloudWatch"
+  action        = "lambda:InvokeFunction"
+  function_name = var.lambda_function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.ecs_task_state_change.arn
+}
 
 resource "aws_ecs_task_definition" "billing_reports_ecs_task" {
   family                   = "${local.app_name}-ecs-task"
