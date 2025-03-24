@@ -13,6 +13,7 @@ from openpyxl.worksheet.table import Table
 import json
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 
@@ -173,6 +174,18 @@ def make_account_by_id_lookup(accounts):
 
     return team_details_by_account_id
 
+def upload_file_to_s3(file_name, bucket, object_name=None):
+    if object_name is None:
+        object_name = file_name
+
+    # Initialize S3 client
+    s3_client = boto3.client('s3')
+    try:
+        s3_client.upload_file(file_name, bucket, object_name)
+    except ClientError as e:
+        logging.error(e)
+        return False
+    return True
 
 def report(
     query_results_file,
@@ -240,6 +253,14 @@ def report(
         report_file_name = f"{report_output_path}/quarterly_report-{date.strftime(query_parameters['start_date'], format_string)}-{date.strftime(query_parameters['end_date'], format_string)}.xlsx"
         create_quarterly_excel(billing_group_totals, accounts, report_file_name)
 
+        s3_bucket = os.environ.get("QR_S3_Bucket")
+        # Extract the Year 
+        year = date.strftime(query_parameters['start_date'], '%Y')
+        s3_key = f"reports/quarterly/{year}/{os.path.basename(report_file_name)}"
+        if upload_file_to_s3(report_file_name, s3_bucket, s3_key):
+            logging.info(f"Successfully uploaded {report_file_name} to S3 bucket {s3_bucket} as {s3_key}")
+        else:
+            logging.error(f"Failed to upload {report_file_name} to S3.")
         # invoke callback to pass back generated file to caller for current billing group
         cb("QUARTERLY_REPORT", report_file_name)
 
@@ -276,14 +297,26 @@ def set_to_formatted_string(some_set):
         formatted_list = formatted_list + item + '; ' 
     return formatted_list.rstrip('; ')
 
+# ToDo: Add Conversion rate used at the time report is generated
 def create_quarterly_excel(billing_group_totals, accounts, quarterly_output_file):
     wb = Workbook()
     ws = wb.active
+    conversion_rate = get_exchange_rate()
+    ws["A1"] = "USD to CAD Conversion Rate:"
+    ws["B1"] = conversion_rate
 
-    ws["A1"] = "Billing Group"
-    ws["B1"] = "Total Spend (CAD)"
-    ws["C1"] = "PO Names"
-    ws["D1"] = "PO Emails"
+    # For Visual representation
+    ws["A2"] = ""
+
+    ws["A3"] = "Billing Group"
+    ws["B3"] = "Total Spend (CAD)"
+    ws["C3"] = "PO Names"
+    ws["D3"] = "PO Emails"
+
+    # ws["A1"] = "Billing Group"
+    # ws["B1"] = "Total Spend (CAD)"
+    # ws["C1"] = "PO Names"
+    # ws["D1"] = "PO Emails"
 
     # NOTE: in this case billing_group = account_coding because for quarterly reports GROUP_TYPE = account_coding
     for billing_group, total in billing_group_totals.items():
