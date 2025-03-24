@@ -94,6 +94,8 @@ QUERY_ORG_ACCOUNTS_ROLE_TO_ASSUME_ARN="arn:aws:iam::<LZ#-ManagementAccountID>:ro
 ATHENA_QUERY_OUTPUT_BUCKET="bcgov-ecf-billing-reports-output-<LZ#-ManagementAccountID>-ca-central-1"
 ATHENA_QUERY_OUTPUT_BUCKET_ARN="arn:aws:s3:::bcgov-ecf-billing-reports-output-<LZ#-ManagementAccountID>-ca-central-1"
 CMK_SSE_KMS_ALIAS="arn:aws:kms:ca-central-1:<LZ#-ManagementAccountID>:alias/BCGov-BillingReports"
+# Note for the quarterly reports we need to pass in s3 bucket name as env variable as well to upload the quialterly report to the s3 bucket
+# QR_S3_Bucket="bcgov-quarterly-reports-${operations-account-id}-${aws_region}"
 ```
 
 > Note: Running the Python code locally requires several open source libraries. Creating a dedicated `virtualenv` as described [here](https://docs.python.org/3/library/venv.html) is recommended to avoid conflicts/clashes with other Python applications and libraries on your machine.

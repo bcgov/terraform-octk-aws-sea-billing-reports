@@ -32,6 +32,14 @@ resource "aws_ses_email_identity" "source_email_address" {
   email = "info@cloud.gov.bc.ca"
 }
 
+resource "aws_s3_bucket" "quarterly_reports_bucket" {
+  bucket = "bcgov-quarterly-reports-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}"
+}
+
+resource "aws_s3_bucket_acl" "quarterly_reports_bucket_acl" {
+  bucket = aws_s3_bucket.quarterly_reports_bucket.id
+  acl    = "private"
+}
 resource "aws_ecr_repository" "billing_reports_ecr" {
   name                 = "${local.app_name}-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}"
   image_tag_mutability = "MUTABLE"
@@ -647,6 +655,10 @@ resource "aws_cloudwatch_event_target" "billing_reports_quarterly_target" {
         {
           "name"  = "CMK_SSE_KMS_ALIAS"
           "value" = "arn:aws:kms:ca-central-1:${var.lz_mgmt_account_id}:alias/BCGov-BillingReports"
+        },
+        {
+          "name"  = "QR_S3_Bucket"
+          "value" = "${aws_s3_bucket.quarterly_reports_bucket.bucket}"
         }
       ],
     }]
