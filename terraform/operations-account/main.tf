@@ -36,10 +36,6 @@ resource "aws_s3_bucket" "quarterly_reports_bucket" {
   bucket = "bcgov-quarterly-reports-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}"
 }
 
-resource "aws_s3_bucket_acl" "quarterly_reports_bucket_acl" {
-  bucket = aws_s3_bucket.quarterly_reports_bucket.id
-  acl    = "private"
-}
 resource "aws_ecr_repository" "billing_reports_ecr" {
   name                 = "${local.app_name}-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}"
   image_tag_mutability = "MUTABLE"
