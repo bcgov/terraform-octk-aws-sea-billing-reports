@@ -125,7 +125,8 @@ resource "aws_iam_policy" "ecs_task_access_policies" {
         Effect = "Allow",
         Action = [
           "s3:Get*",
-          "s3:List*"
+          "s3:List*",
+          "s3:PutObject"
         ],
         Resource = ["*"] // TODO: Too relaxed. Need to revise for LZ deployment
       },
