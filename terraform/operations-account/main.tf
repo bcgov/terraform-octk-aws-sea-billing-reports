@@ -16,8 +16,12 @@ data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 data "aws_vpc" "current" {}
 
-data "aws_subnet_ids" "current" {
-  vpc_id = data.aws_vpc.current.id
+data "aws_subnets" "current" {
+  # vpc_id = data.aws_vpc.current.id
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.current.id]
+  }
 
   tags = {
     Name = "App_Central*"
@@ -30,10 +34,6 @@ locals {
 
 resource "aws_ses_email_identity" "source_email_address" {
   email = "info@cloud.gov.bc.ca"
-}
-
-resource "aws_s3_bucket" "quarterly_reports_bucket" {
-  bucket = "bcgov-quarterly-reports-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}"
 }
 
 resource "aws_ecr_repository" "billing_reports_ecr" {
@@ -125,8 +125,7 @@ resource "aws_iam_policy" "ecs_task_access_policies" {
         Effect = "Allow",
         Action = [
           "s3:Get*",
-          "s3:List*",
-          "s3:PutObject"
+          "s3:List*"
         ],
         Resource = ["*"] // TODO: Too relaxed. Need to revise for LZ deployment
       },
@@ -501,10 +500,11 @@ resource "aws_cloudwatch_event_target" "billing_reports_weekly_target" {
     platform_version        = "LATEST"
     enable_execute_command  = false
     enable_ecs_managed_tags = false
+    propagate_tags          = "TASK_DEFINITION"
 
     network_configuration {
       security_groups = [aws_security_group.billing_reports_ecs_task_sg.id]
-      subnets         = [for subnet in data.aws_subnet_ids.current.ids : subnet]
+      subnets         = [for subnet in data.aws_subnets.current.ids : subnet]
       // TODO: Can you make this false and revise to use NAT for access to ECR and CloudWatch???
       assign_public_ip = true
     }
@@ -582,10 +582,11 @@ resource "aws_cloudwatch_event_target" "billing_reports_monthly_target" {
     platform_version        = "LATEST"
     enable_execute_command  = false
     enable_ecs_managed_tags = false
+    propagate_tags          = "TASK_DEFINITION"
 
     network_configuration {
       security_groups = [aws_security_group.billing_reports_ecs_task_sg.id]
-      subnets         = [for subnet in data.aws_subnet_ids.current.ids : subnet]
+      subnets         = [for subnet in data.aws_subnets.current.ids : subnet]
       // TODO: Can you make this false and revise to use NAT for access to ECR and CloudWatch???
       assign_public_ip = true
     }
@@ -652,10 +653,6 @@ resource "aws_cloudwatch_event_target" "billing_reports_quarterly_target" {
         {
           "name"  = "CMK_SSE_KMS_ALIAS"
           "value" = "arn:aws:kms:ca-central-1:${var.lz_mgmt_account_id}:alias/BCGov-BillingReports"
-        },
-        {
-          "name"  = "QR_S3_Bucket"
-          "value" = "${aws_s3_bucket.quarterly_reports_bucket.bucket}"
         }
       ],
     }]
@@ -667,10 +664,11 @@ resource "aws_cloudwatch_event_target" "billing_reports_quarterly_target" {
     platform_version        = "LATEST"
     enable_execute_command  = false
     enable_ecs_managed_tags = false
+    propagate_tags          = "TASK_DEFINITION"
 
     network_configuration {
       security_groups = [aws_security_group.billing_reports_ecs_task_sg.id]
-      subnets         = [for subnet in data.aws_subnet_ids.current.ids : subnet]
+      subnets         = [for subnet in data.aws_subnets.current.ids : subnet]
       // TODO: Can you make this false and revise to use NAT for access to ECR and CloudWatch???
       assign_public_ip = true
     }
