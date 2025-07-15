@@ -19,7 +19,7 @@ data "aws_vpc" "current" {}
 data "aws_subnets" "current" {
   # vpc_id = data.aws_vpc.current.id
   filter {
-    name = "vpc-id"
+    name   = "vpc-id"
     values = [data.aws_vpc.current.id]
   }
 
@@ -500,7 +500,7 @@ resource "aws_cloudwatch_event_target" "billing_reports_weekly_target" {
     platform_version        = "LATEST"
     enable_execute_command  = false
     enable_ecs_managed_tags = false
-    propagate_tags = "TASK_DEFINITION"
+    propagate_tags          = "TASK_DEFINITION"
 
     network_configuration {
       security_groups = [aws_security_group.billing_reports_ecs_task_sg.id]
@@ -582,7 +582,7 @@ resource "aws_cloudwatch_event_target" "billing_reports_monthly_target" {
     platform_version        = "LATEST"
     enable_execute_command  = false
     enable_ecs_managed_tags = false
-    propagate_tags = "TASK_DEFINITION"
+    propagate_tags          = "TASK_DEFINITION"
 
     network_configuration {
       security_groups = [aws_security_group.billing_reports_ecs_task_sg.id]
@@ -664,7 +664,7 @@ resource "aws_cloudwatch_event_target" "billing_reports_quarterly_target" {
     platform_version        = "LATEST"
     enable_execute_command  = false
     enable_ecs_managed_tags = false
-    propagate_tags = "TASK_DEFINITION"
+    propagate_tags          = "TASK_DEFINITION"
 
     network_configuration {
       security_groups = [aws_security_group.billing_reports_ecs_task_sg.id]
