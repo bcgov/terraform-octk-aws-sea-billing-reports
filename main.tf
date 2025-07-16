@@ -1,6 +1,6 @@
 module "management-account" {
-  source                            = "./terraform/management-account"
-  ops_account_id                    = var.ops_account_id
+  source         = "./terraform/management-account"
+  ops_account_id = var.ops_account_id
 
   providers = {
     aws = aws.Management-account
@@ -8,11 +8,11 @@ module "management-account" {
 }
 
 module "operations-account" {
-  source             = "./terraform/operations-account"
-  lz_mgmt_account_id = var.mgmt_account_id
-  lambda_arn = var.lambda_arn
-  lambda_function_name= var.lambda_function_name
-  sns_topic_arn = var.sns_topic_arn
+  source               = "./terraform/operations-account"
+  lz_mgmt_account_id   = var.mgmt_account_id
+  lambda_arn           = var.lambda_arn
+  lambda_function_name = var.lambda_function_name
+  sns_topic_arn        = var.sns_topic_arn
 
   providers = {
     aws = aws.Operations-account
