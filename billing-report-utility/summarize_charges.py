@@ -312,6 +312,7 @@ def create_quarterly_excel(billing_group_totals, accounts, quarterly_output_file
     ws["B3"] = "Total Spend (CAD)"
     ws["C3"] = "PO Names"
     ws["D3"] = "PO Emails"
+    ws["E3"] = "Related Project Sets"
 
     # ws["A1"] = "Billing Group"
     # ws["B1"] = "Total Spend (CAD)"
@@ -325,21 +326,28 @@ def create_quarterly_excel(billing_group_totals, accounts, quarterly_output_file
         related_accounts = []
 
         for account in accounts :
-          if account["account_coding"] == billing_group :
-              related_accounts.append(account)
+            if account["account_coding"] == billing_group :
+                related_accounts.append(account)
 
         # Create a duplicate-free list of all PO's associated with these accounts
         po_names = set([account["admin_contact_name"] for account in related_accounts])
         po_emails = set([account["admin_contact_email"] for account in related_accounts])
+        # Map each project set (billing_group) to its status
+        project_set_status_map = {}
+        for account in related_accounts:
+            project_set_status_map[account["billing_group"]] = account["status"]
+
+        # Format as "ProjectSet(Status)"
+        related_project_sets_with_status = [f"{name}({status})" for name, status in project_set_status_map.items()]
 
         po_names_formatted = set_to_formatted_string(po_names)
         po_emails_formatted = set_to_formatted_string(po_emails)
-        
+        related_project_sets_formated = "; ".join(related_project_sets_with_status)
         if total != 0 :
           if billing_group == "000000000000000000000000":
-              row = ("CPF. Pay direct via Service Order. No JV needed.", total, po_names_formatted, po_emails_formatted)
+              row = ("CPF. Pay direct via Service Order. No JV needed.", total, po_names_formatted, po_emails_formatted,related_project_sets_formated)
           else:           
-              row = (billing_group, total, po_names_formatted, po_emails_formatted)
+              row = (billing_group, total, po_names_formatted, po_emails_formatted,related_project_sets_formated)
           ws.append(row)
 
     wb.save(f"{quarterly_output_file}")
