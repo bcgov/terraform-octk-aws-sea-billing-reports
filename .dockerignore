@@ -1,0 +1,9 @@
+.git/
+**/.terraform/
+**/__pycache__/
+**/*.py[cod]
+billing-report-utility/output/
+reports/
+Envs
+.env*
+aws_credentials
